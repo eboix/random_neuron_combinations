@@ -8,20 +8,20 @@ images each feature fires on and the validation FVU of the SAE.
 Writes into <root>/acts/<model>/: {slug}_sae_max.npy (N,F) f32, {slug}_sae_argmax.npy (N,F) i16,
 {slug}_sae_active.npy (F) int32, {slug}_sae.json
 """
-import argparse, json, re, sys, time
+import argparse, os, json, re, sys, time
 from pathlib import Path
 import numpy as np, torch
 sys.path.insert(0, str(Path(__file__).parent))
 from sae import TopKSAE
 from extract_acts import ValSet
-from model_adapters import get_adapter
+from model_adapters import get_adapter, find_layer
 from torch.utils.data import DataLoader
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--root', required=True); ap.add_argument('--model', default='facebook/convnext-tiny-224')
     ap.add_argument('--layer', default='stage3.block2'); ap.add_argument('--sae', required=True)
-    ap.add_argument('--batch-size', type=int, default=250); ap.add_argument('--workers', type=int, default=10)
+    ap.add_argument('--batch-size', type=int, default=250); ap.add_argument('--workers', type=int, default=max(2, int(os.environ.get('SLURM_CPUS_PER_TASK', '12')) - 2))
     args = ap.parse_args()
     root = Path(args.root); slug = args.layer.replace('.', '_'); mname = args.model.split('/')[-1]
     out = root / 'acts' / mname
@@ -29,8 +29,7 @@ def main():
     dev = 'cuda'
     from transformers import AutoModelForImageClassification
     model = AutoModelForImageClassification.from_pretrained(args.model).to(dev).eval()
-    ad = get_adapter(model); to_spatial = ad['to_spatial']
-    mod = next(l for l in ad['layers'] if l['name'] == args.layer)['module']
+    ad = get_adapter(model); lyr = find_layer(ad, args.layer); to_spatial = lyr['to_spatial']; mod = lyr['module']
     cap = {}; mod.register_forward_hook(lambda mo, i, o: cap.__setitem__('h', to_spatial(o)))
     sae = TopKSAE.load(args.sae, dev).eval(); Fdim = sae.f
     ds = ValSet(root, ad['preprocess']); N = len(ds)

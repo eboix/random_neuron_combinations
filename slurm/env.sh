@@ -1,14 +1,18 @@
 #!/bin/bash
 # Environment for steps launched into the node7 holder job (srun --jobid=... --overlap bash slurm/env.sh <cmd>).
 set -euo pipefail
-export ROOT=/scratch/tmp/eboix/random_is_clean
-export HF_HOME=/scratch/tmp/eboix/hf_cache
+# node-local base: /scratch/tmp (node7/9/10), else /scratch2 (node6), else /scratch
+if [ -d /scratch/tmp ] && mkdir -p /scratch/tmp/eboix 2>/dev/null; then BASE=/scratch/tmp/eboix
+elif [ -d /scratch2 ] && mkdir -p /scratch2/eboix 2>/dev/null; then BASE=/scratch2/eboix
+else mkdir -p /scratch/eboix && BASE=/scratch/eboix; fi
+export BASE ROOT=$BASE/random_is_clean
+export HF_HOME=$BASE/hf_cache
 export HF_HUB_DISABLE_XET=1
 export HF_HUB_ENABLE_HF_TRANSFER=0
 export HF_HUB_DOWNLOAD_TIMEOUT=120
-export TMPDIR=/scratch/tmp/eboix/tmp; mkdir -p "$TMPDIR" "$ROOT"
-export XDG_CACHE_HOME=/scratch/tmp/eboix/xdg_cache
-export TORCHINDUCTOR_CACHE_DIR=/scratch/tmp/eboix/inductor_cache
+export TMPDIR=$BASE/tmp; mkdir -p "$TMPDIR" "$ROOT"
+export XDG_CACHE_HOME=$BASE/xdg_cache
+export TORCHINDUCTOR_CACHE_DIR=$BASE/inductor_cache
 export TOKENIZERS_PARALLELISM=false
 _ncpu="${SLURM_CPUS_PER_TASK:-${SLURM_CPUS_ON_NODE:-8}}"
 export OMP_NUM_THREADS="$_ncpu" MKL_NUM_THREADS="$_ncpu"

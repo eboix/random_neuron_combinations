@@ -12,7 +12,7 @@ plus running mean/var per unit, predictions, and the direction matrices.
     python scripts/extract_acts.py --root /scratch/tmp/eboix/random_is_clean \
         --model facebook/convnext-tiny-224 --k-virtual 128
 """
-import argparse, json, os, re, time
+import argparse, os, json, os, re, time
 from pathlib import Path
 import numpy as np
 import torch
@@ -40,10 +40,12 @@ def main():
     ap.add_argument('--k-virtual', type=int, default=128)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--batch-size', type=int, default=250)
-    ap.add_argument('--workers', type=int, default=10)
+    ap.add_argument('--workers', type=int, default=max(2, int(os.environ.get('SLURM_CPUS_PER_TASK', '12')) - 2))
     ap.add_argument('--limit', type=int, default=0, help='debug: only first N images')
     ap.add_argument('--virt-std-from', default='', help='acts dir of a previous run: scale each Gaussian coefficient by 1/std of that unit (equal-variance random combination)')
     ap.add_argument('--out-name', default='', help='output subdir name under acts/ (default: model name)')
+    ap.add_argument('--sites', default='mlp', help='comma list of hook sites (convnext: mlp,out,resid; vit: mlp,attn_out,mlp_out,resid)')
+    ap.add_argument('--blocks', default='', help='optional comma list of block names to restrict to (e.g. stage3.block2,stage2.block8)')
     args = ap.parse_args()
     root = Path(args.root)
     out = root / 'acts' / (args.out_name or args.model.split('/')[-1]); out.mkdir(parents=True, exist_ok=True)
@@ -52,11 +54,14 @@ def main():
     dev = 'cuda'
     from transformers import AutoModelForImageClassification
     model = AutoModelForImageClassification.from_pretrained(args.model).to(dev).eval()
-    adapter = get_adapter(model); layers = adapter['layers']; to_spatial = adapter['to_spatial']
+    adapter = get_adapter(model, sites=args.sites.split(',')); layers = adapter['layers']
+    if args.blocks:
+        keep = set(args.blocks.split(',')); layers = [l for l in layers if l['name'].split('.')[0] + ('.' + l['name'].split('.')[1] if l['name'].startswith('stage') else '') in keep]
     assert layers, 'no blocks found'
     captured = {}
     def mk(i):
-        def hook(mod, inp, outp): captured[i] = to_spatial(outp)
+        ts = layers[i]['to_spatial']
+        def hook(mod, inp, outp): captured[i] = ts(outp)
         return hook
     for i, L in enumerate(layers): L['module'].register_forward_hook(mk(i))
 
@@ -119,11 +124,14 @@ def main():
                 print(f'[extract] {done}/{n} {done/(time.time()-t0):.0f} img/s', flush=True)
     labels = np.load(root / 'val_labels.npy')[:n]
     acc = float((preds == labels).mean())
+    old = json.load(open(out / 'meta.json')) if (out / 'meta.json').exists() else {}
     meta = {'model': args.model, 'arch': adapter['arch'], 'preprocess': adapter['preprocess'], 'n_images': n, 'k_virtual': args.k_virtual, 'seed': args.seed,
             'top1_acc': acc, 'spatialStatistic': 'maximum post-GELU MLP hidden activation per image',
             'virtual': ('K Gaussian unit-norm directions in the raw hidden space (seed per run, generator shared across layers in block order)' if not args.virt_std_from else
                         'K unit-norm directions with Gaussian coefficients scaled by 1/std of each unit (equal-variance random combination), seed per run'),
-            'layers': [{k: v for k, v in L.items() if k not in ('module', 'dirs')} for L in layers]}
+            'layers': [{k: v for k, v in L.items() if k not in ('module', 'dirs', 'to_spatial')} for L in layers]}
+    new_names = {L['name'] for L in layers}
+    meta['layers'] = [l for l in old.get('layers', []) if l['name'] not in new_names] + meta['layers']   # keep earlier sites
     for i, L in enumerate(layers):
         s = store[i]
         mean = (s['sum'] / s['count']).cpu().numpy(); var = (s['sumsq'] / s['count']).cpu().numpy() - mean ** 2

@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent))
-from model_adapters import get_adapter, pil_input
+from model_adapters import get_adapter, pil_input, find_layer
 
 FOCUS = [64, 96, 144, 192]
 BUCKETS = [('top16', 'Top 16', 'strongest image maxima', list(range(1, 17))),
@@ -74,19 +74,23 @@ def main():
     cfg = AutoConfig.from_pretrained(args.model)
     names = {int(k): v.split(',')[0] for k, v in cfg.id2label.items()}
 
-    real_max = np.load(acts / f'{slug}_real_max.npy', mmap_mode='r'); real_min = np.load(acts / f'{slug}_real_min.npy', mmap_mode='r')
-    real_amax = np.load(acts / f'{slug}_real_argmax.npy', mmap_mode='r'); real_amin = np.load(acts / f'{slug}_real_argmin.npy', mmap_mode='r')
-    virt_max = np.load(acts / f'{slug}_virt_max.npy', mmap_mode='r'); virt_min = np.load(acts / f'{slug}_virt_min.npy', mmap_mode='r')
-    virt_amax = np.load(acts / f'{slug}_virt_argmax.npy', mmap_mode='r'); virt_amin = np.load(acts / f'{slug}_virt_argmin.npy', mmap_mode='r')
-    dirs = np.load(acts / f'{slug}_virtual_dirs.npy'); K = dirs.shape[1]
-    ustats = np.load(acts / f'{slug}_unit_stats.npz')
-    N = real_max.shape[0]
+    need_rv = ('real' in kinds) or ('virt' in kinds)
+    if need_rv:
+        real_max = np.load(acts / f'{slug}_real_max.npy', mmap_mode='r'); real_min = np.load(acts / f'{slug}_real_min.npy', mmap_mode='r')
+        real_amax = np.load(acts / f'{slug}_real_argmax.npy', mmap_mode='r'); real_amin = np.load(acts / f'{slug}_real_argmin.npy', mmap_mode='r')
+        virt_max = np.load(acts / f'{slug}_virt_max.npy', mmap_mode='r'); virt_min = np.load(acts / f'{slug}_virt_min.npy', mmap_mode='r')
+        virt_amax = np.load(acts / f'{slug}_virt_argmax.npy', mmap_mode='r'); virt_amin = np.load(acts / f'{slug}_virt_argmin.npy', mmap_mode='r')
+        dirs = np.load(acts / f'{slug}_virtual_dirs.npy'); K = dirs.shape[1]
+        ustats = np.load(acts / f'{slug}_unit_stats.npz')
+        N = real_max.shape[0]
+    else:
+        dirs = np.zeros((D, 0), dtype=np.float32); K = meta.get('k_virtual', 0); N = meta['n_images']
     rng = np.random.default_rng(args.seed)
     if args.real_units:
         real_units = [int(x) for x in args.real_units.split(',')]
     else:
         real_units = [0] + sorted(rng.choice(np.arange(1, D), size=args.n_real - 1, replace=False).tolist())
-    virt_units = sorted(rng.choice(np.arange(K), size=min(args.n_virt, K), replace=False).tolist())
+    virt_units = sorted(rng.choice(np.arange(K), size=min(args.n_virt, K), replace=False).tolist()) if K else []
     sae_units, sae_max, sae_amax, sae_active, sae_info, sae_model = [], None, None, None, {}, None
     if 'sae' in kinds:
         sae_max = np.load(acts / f'{slug}_sae_max.npy', mmap_mode='r'); sae_amax = np.load(acts / f'{slug}_sae_argmax.npy', mmap_mode='r')
@@ -104,9 +108,8 @@ def main():
         dev = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = AutoModelForImageClassification.from_pretrained(args.model).to(dev).eval()
         cap = {}
-        ad = get_adapter(model); to_spatial = ad['to_spatial']
-        mod = next(l for l in ad['layers'] if l['name'] == args.layer)['module']
-        mod.register_forward_hook(lambda m, i, o: cap.__setitem__('h', to_spatial(o)))
+        ad = get_adapter(model); lyr = find_layer(ad, args.layer); to_spatial = lyr['to_spatial']
+        lyr['module'].register_forward_hook(lambda m, i, o: cap.__setitem__('h', to_spatial(o)))
         dirs_t = torch.tensor(dirs, device=dev)
         if 'sae' in kinds:
             import sys; sys.path.insert(0, str(Path(__file__).parent)); from sae import TopKSAE
@@ -191,7 +194,7 @@ def main():
              'cropGeometry': {'inputCenterCrop': pre['crop'], 'sourceImage': pre['resize'], 'focusCropByStage': FOCUS, 'preprocess': pre, 'arch': meta.get('arch', 'convnext')}, 'buckets': [{'id': b[0], 'label': b[1], 'description': b[2], 'count': len(b[3])} for b in BUCKETS] + [{'id': 'bottom4', 'label': 'Most negative', 'count': 4}],
              'layers': []}
     m['layers'] = [l for l in m['layers'] if l['name'] != args.layer] + [{'name': args.layer, 'slug': slug, 'stage': stage, 'focus': win, 'channels': D, 'kVirtual': K, 'data': f'data/{slug}.json',
-                   'nReal': len(real_units) if 'real' in kinds else 0, 'nVirt': len(virt_units) if 'virt' in kinds else 0, 'nSae': len(sae_units),
+                   'site': L.get('site', 'mlp'), 'nReal': len(real_units) if 'real' in kinds else 0, 'nVirt': len(virt_units) if 'virt' in kinds else 0, 'nSae': len(sae_units),
                    **({'sae': {k: sae_info.get(k) for k in ('features', 'k', 'val_fvu', 'alive_ge500')}} if sae_units else {})}]
     m['layers'].sort(key=lambda l: l['name'])
     json.dump(m, open(mpath, 'w'), indent=1)

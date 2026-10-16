@@ -7,14 +7,14 @@ memmap for SAE training. Images are written in a random order so contiguous slic
         --model facebook/convnext-tiny-224 --layer stage3.block2 --n-images 100000
 Output: <root>/sae/<model>/<slug>/train_acts.npy  (n_images*HW, D) fp16, plus stats.json
 """
-import argparse, io, json, re, sys, time
+import argparse, os, io, json, re, sys, time
 from multiprocessing import Pool
 from pathlib import Path
 import numpy as np, torch
 from PIL import Image
 import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).parent))
-from model_adapters import get_adapter, pil_input
+from model_adapters import get_adapter, pil_input, find_layer
 
 PRE = {'resize': 256, 'crop': 224, 'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]}   # set from the adapter before the Pool forks
 
@@ -25,7 +25,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--root', required=True); ap.add_argument('--model', default='facebook/convnext-tiny-224')
     ap.add_argument('--layer', default='stage3.block2'); ap.add_argument('--n-images', type=int, default=100000)
-    ap.add_argument('--batch', type=int, default=256); ap.add_argument('--workers', type=int, default=10)
+    ap.add_argument('--batch', type=int, default=256); ap.add_argument('--workers', type=int, default=max(2, int(os.environ.get('SLURM_CPUS_PER_TASK', '12')) - 2))
     ap.add_argument('--seed', type=int, default=0)
     args = ap.parse_args()
     root = Path(args.root); slug = args.layer.replace('.', '_'); mname = args.model.split('/')[-1]
@@ -36,8 +36,7 @@ def main():
     dev = 'cuda'
     from transformers import AutoModelForImageClassification
     model = AutoModelForImageClassification.from_pretrained(args.model).to(dev).eval()
-    ad = get_adapter(model); to_spatial = ad['to_spatial']; PRE.update(ad['preprocess'])
-    mod = next(l for l in ad['layers'] if l['name'] == args.layer)['module']
+    ad = get_adapter(model); PRE.update(ad['preprocess']); lyr = find_layer(ad, args.layer); to_spatial = lyr['to_spatial']; mod = lyr['module']
     cap = {}; mod.register_forward_hook(lambda mo, i, o: cap.__setitem__('h', to_spatial(o)))
     mean_t = torch.tensor(PRE['mean'], device=dev).view(1, 3, 1, 1); std_t = torch.tensor(PRE['std'], device=dev).view(1, 3, 1, 1)
     with torch.no_grad():

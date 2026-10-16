@@ -19,7 +19,7 @@ from PIL import Image
 def merge_model(site, mdir, seed):
     main_dir = site / mdir; std_dir = site / f'{mdir}-std'
     meta = json.load(open(main_dir / 'meta.json'))
-    (main_dir / 'sprites').mkdir(exist_ok=True)
+    if meta.get('modality') != 'text': (main_dir / 'sprites').mkdir(exist_ok=True)
     for L in meta['layers']:
         slug = L['slug']
         d = json.load(open(main_dir / 'data' / f'{slug}.json'))
@@ -43,11 +43,12 @@ def merge_model(site, mdir, seed):
             L[count_key] = sum(1 for n in d['neurons'] if n['kind'] == dst_kind)
             vm = json.load(open(vdir / 'meta.json')); vl = next((l for l in vm['layers'] if l['slug'] == slug), {})
             if 'sae' in vl: L['sae'] = vl['sae']
+        text = d.get('modality') == 'text'
         for n in d['neurons']:
-            if 'sheetFile' not in n: n['sheetFile'] = str(main_dir / 'examples' / slug / f'{n["kind"]}_{n["channel"]:04d}.jpg')  # builder's per-unit sheet (idempotent)
+            if not text and 'sheetFile' not in n: n['sheetFile'] = str(main_dir / 'examples' / slug / f'{n["kind"]}_{n["channel"]:04d}.jpg')  # builder's per-unit sheet (idempotent)
             if n['id'] in coh: n['coherence'] = {k: coh[n['id']][k] for k in ('top16', 'p999', 'p99')}
-        # sprites: one vertical stack per kind, in unit order
-        for kind in sorted({n['kind'] for n in d['neurons']}):
+        # sprites: one vertical stack per kind, in unit order (image models only)
+        for kind in ([] if text else sorted({n['kind'] for n in d['neurons']})):
             ns = [n for n in d['neurons'] if n['kind'] == kind]
             sheets = [Image.open(n['sheetFile']).convert('RGB') for n in ns]
             w, h = sheets[0].size

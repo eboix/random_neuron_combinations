@@ -12,7 +12,7 @@ from sae import TopKSAE
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--acts', required=True); ap.add_argument('--expansion', type=int, default=8); ap.add_argument('--k', type=int, default=32)
+    ap.add_argument('--acts', required=True); ap.add_argument('--expansion', default='8', help='int, or "auto" = 16x for D<=1024 else 8x'); ap.add_argument('--k', type=int, default=32)
     ap.add_argument('--steps', type=int, default=10000); ap.add_argument('--batch', type=int, default=4096); ap.add_argument('--lr', type=float, default=3e-4)
     ap.add_argument('--resample-every', type=int, default=500, help='re-initialise dead latents to high-residual inputs every N steps (0 = off), until 75%% of training')
     ap.add_argument('--dead-steps', type=int, default=500); ap.add_argument('--aux-k', type=int, default=512); ap.add_argument('--aux-coef', type=float, default=1 / 32)
@@ -23,6 +23,7 @@ def main():
     dev = 'cuda'
     acts_dir = Path(args.acts); X = np.load(acts_dir / 'train_acts.npy', mmap_mode='r'); N, D = X.shape
     n_hold = int(N * args.holdout); n_train = N - n_hold          # last slice held out (images are in random order)
+    args.expansion = (16 if D <= 1024 else 8) if args.expansion == 'auto' else int(args.expansion)
     f = args.expansion * D
     sae = TopKSAE(D, f, args.k).to(dev)
     # scale so that E||x|| = sqrt(D); b_dec = mean of scaled data
