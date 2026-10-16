@@ -1,0 +1,11 @@
+# node-local data (activations, images, SAE checkpoints) lives on node7 /scratch/tmp/eboix/random_is_clean
+slurm/logs/
+__pycache__/
+*.pyc
+# microscope site: keep viewer.html, index.html, models.js, <model>/{meta.js,meta.json,data/*.js,data/*_coherence.json,sprites/*.jpg}
+microscope/*-std/
+microscope/*-sae/
+microscope/*/examples/
+microscope/*/heatmaps/
+microscope/*/data/*.json
+!microscope/*/data/*_coherence.json

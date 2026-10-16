@@ -1,0 +1,159 @@
+<title>ConvNeXt Neuron Microscope</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a fixed-width control rail on the left (model, layer, mode, summary), a scanning grid of
+   unit cards on the right, and a detail strip of bucketed crops below the grid. Microscope/lab
+   palette: cool grey ground, deep teal accent; unit kinds get their own hue (real = green,
+   random = amber, equal-variance random = plum). */
+:root{--bg:#eef1f4;--panel:#f9fafb;--ink:#182027;--muted:#5b6670;--line:#d3dbe1;--accent:#0e6b74;--accent-ink:#ffffff;
+ --real:#0f7b5f;--virt:#b4700e;--virt-std:#8b3d8f;--sae:#2457a8;--hidden:#6b7680;--chip:#e3e8ec;--sel:#0e6b74;--empty:#e6e3dc;
+ --heat-r:255;--heat-g:122;--heat-b:0;--heat-a:.72;
+ --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121619;--panel:#1a2024;--ink:#e6ebee;--muted:#93a0aa;--line:#2b353c;--accent:#5fc3cc;--accent-ink:#0b1517;
+ --real:#5bd0a6;--virt:#f0b25a;--virt-std:#d79add;--sae:#7fa8ec;--hidden:#7c8891;--chip:#232c32;--sel:#5fc3cc;--empty:#2a2f33;--heat-r:255;--heat-g:150;--heat-b:40;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121619;--panel:#1a2024;--ink:#e6ebee;--muted:#93a0aa;--line:#2b353c;--accent:#5fc3cc;--accent-ink:#0b1517;
+ --real:#5bd0a6;--virt:#f0b25a;--virt-std:#d79add;--sae:#7fa8ec;--hidden:#7c8891;--chip:#232c32;--sel:#5fc3cc;--empty:#2a2f33;--heat-r:255;--heat-g:150;--heat-b:40;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+body.heat .ex canvas{opacity:1}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 24px}
+header{padding-block:14px 12px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:19px;font-weight:600;text-wrap:balance}
+header p{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+.layout{display:grid;grid-template-columns:272px minmax(0,1fr);gap:20px;padding-top:14px}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+aside{min-width:0}
+main{min-width:0}
+h2{font-size:16px;margin:16px 0 8px;font-weight:600}
+h3{font-size:11px;margin:14px 0 6px;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button,select{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:5px 10px;cursor:pointer;max-width:100%}
+button:focus-visible,select:focus-visible,.card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+select{width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;margin-bottom:8px}
+.card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:7px;cursor:pointer;min-width:0}
+.card.sel{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+.card .t{font-size:12px;font-weight:500;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.card .s{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin:6px 0 5px}
+.mini div,.crop{aspect-ratio:1;max-width:100%;background-repeat:no-repeat;background-color:var(--empty);border-radius:3px}
+.kind{font-size:10px;padding:1px 7px;border-radius:99px;color:#fff;white-space:nowrap;letter-spacing:.02em}
+.kind.real{background:var(--real)}.kind.virt{background:var(--virt)}.kind.virt_std{background:var(--virt-std)}.kind.sae{background:var(--sae)}.kind.hidden{background:var(--hidden)}
+.stats{font-size:12px;color:var(--muted);font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.6;overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.ex{font-size:11px;min-width:0}
+.ex .crop{position:relative;overflow:hidden}
+.ex canvas{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none}
+body.heat .ex canvas{opacity:1}
+.ex p{margin:3px 0 0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex p b{color:var(--ink);font-family:var(--mono);font-weight:500}
+.rate{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel);margin:8px 0;font-size:12.5px}
+.box table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.box td,.box th{padding:3px 6px 3px 0;text-align:right;font-family:var(--mono);font-weight:400;font-size:12px}
+.box th{color:var(--muted);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase}
+.box td:first-child,.box th:first-child{text-align:left;font-family:var(--sans)}
+.note{font-size:12px;color:var(--muted)}
+details{margin:8px 0}summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+textarea{width:100%;min-height:90px;font:11px var(--mono);background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.sticky{position:sticky;top:env(safe-area-inset-top,0px)}
+@media (max-width:860px){.sticky{position:static}}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .12s}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1 id="title">ConvNeXt neuron microscope</h1>
+  <p id="sub"></p>
+</header>
+<div class="layout">
+<aside><div class="sticky">
+  <h3>Model</h3>
+  <select id="modelSel" aria-label="Model"></select>
+  <h3>Layer</h3>
+  <select id="layerSel" aria-label="Layer"></select>
+  <h3>Mode</h3>
+  <div class="ctl">
+    <button id="modeLabeled" class="on">Labeled</button>
+    <button id="modeBlind">Blind</button>
+    <button id="heatToggle" class="on" title="Overlay the unit's spatial activation map (positive part, scaled to the image's maximum) on each example crop">Heatmap</button>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div id="summary"></div>
+  <div id="blindBox" hidden>
+    <h3>Blind rating</h3>
+    <p class="note">Units are shuffled and their type is hidden. Rate each unit from its examples, then reveal. Ratings stay in this browser only.</p>
+    <div class="ctl"><button id="reveal">Reveal types</button><button id="copyBtn">Copy ratings</button><button id="clearBtn">Clear</button></div>
+    <div id="ratingBox"></div>
+    <textarea id="ratingsOut" hidden aria-label="Ratings JSON"></textarea>
+  </div>
+  <details><summary>About these examples</summary><p class="note" id="about"></p></details>
+</div></aside>
+<main>
+  <div id="units"></div>
+  <div id="detail"></div>
+</main>
+</div>
+</div>
+
+<script src="models.js"></script>
+<script>
+const MODELS=window.MICRO_MODELS;
+let META=MODELS[0];
+const S={layer:null,data:null,sel:null,mode:'labeled',revealed:false};
+const $=s=>document.querySelector(s);
+const fmt=x=>Number(x).toFixed(Math.abs(x)>=100?1:Math.abs(x)>=10?2:3);
+const KINDS={real:'real neuron',virt:'random combination',virt_std:'random combination, equal variance',sae:'SAE feature'};
+const SHORT={real:'real',virt:'random',virt_std:'random·eqvar',sae:'SAE'};
+function cropStyle(n,cell){const cols=META.exampleSheet.columns,rows=META.exampleSheet.rows,nr=n.sheetRows||1,r0=n.sheetRow||0;const x=cell%cols,y=Math.floor(cell/cols);const ny=rows*nr;
+return `background-image:url('${META.dir}/${n.sheet}');background-size:${cols*100}% ${ny*100}%;background-position:${cols>1?x*100/(cols-1):0}% ${ny>1?(r0*rows+y)*100/(ny-1):0}%`}
+function loadLayer(l){const key=`${META.dir}/${l.slug}`;return new Promise((res,rej)=>{if(window.MICRO_DATA&&window.MICRO_DATA[key])return res(window.MICRO_DATA[key]);const s=document.createElement('script');s.src=`${META.dir}/${l.data.replace(/\.json$/,'.js')}`;s.onload=()=>res(window.MICRO_DATA[key]);s.onerror=rej;document.head.appendChild(s)})}
+const ratingsKey=()=>`ratings:${META.model}:${S.layer.slug}`;
+function getRatings(){try{return JSON.parse(localStorage.getItem(ratingsKey())||'{}')}catch(e){return{}}}
+function setRating(id,v){try{const r=getRatings();r[id]=v;localStorage.setItem(ratingsKey(),JSON.stringify(r))}catch(e){}}
+function showKind(){return S.mode==='labeled'||S.revealed}
+function unitList(){const ns=S.data.neurons;if(S.mode==='labeled')return ns.map((n,i)=>({n,i,label:`${SHORT[n.kind]} ${n.channel}`}));return S.data.blindOrder.map((i,k)=>({n:ns[i],i,label:`unit ${String.fromCharCode(65+Math.floor(k/26))}${k%26+1}`}))}
+function purity(n){const c={};for(const cell of n.examples[0].cells)c[cell.datasetLabel]=(c[cell.datasetLabel]||0)+1;const [lab,k]=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];return {lab,k}}
+function renderUnits(){const list=unitList(),r=getRatings();const kinds=[...new Set(S.data.neurons.map(n=>n.kind))];
+const groups=S.mode==='labeled'?kinds.map(k=>[KINDS[k].replace(/^./,c=>c.toUpperCase())+'s',list.filter(u=>u.n.kind===k)]):[['Shuffled units',list]];let html='';
+for(const [title,us] of groups){html+=`<h2>${title} <span class="note">${us.length}</span></h2><div class="grid">`;for(const u of us){const p=purity(u.n);const rated=r[u.n.id]?` · ${r[u.n.id]}`:'';const sub=S.mode==='labeled'?`${p.lab} ${p.k}/16`:`max ${fmt(u.n.stats.max)}`;
+html+=`<div class="card ${S.sel===u.i?'sel':''}" data-i="${u.i}" tabindex="0" role="button"><div class="t"><span>${u.label}</span>${showKind()?`<span class="kind ${u.n.kind}">${SHORT[u.n.kind]}</span>`:'<span class="kind hidden">?</span>'}</div><div class="mini">${[0,1,2,3].map(c=>`<div style="${cropStyle(u.n,c)}"></div>`).join('')}</div><div class="s" title="${sub}">${sub}${rated}</div></div>`}html+='</div>'}
+$('#units').innerHTML=html;document.querySelectorAll('.card').forEach(c=>{c.onclick=()=>select(+c.dataset.i);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(+c.dataset.i)}}})}
+function drawHeat(n){if(!n.heatmaps24)return;const raw=atob(n.heatmaps24);const cs=getComputedStyle(document.documentElement);const R=+cs.getPropertyValue('--heat-r'),G=+cs.getPropertyValue('--heat-g'),B=+cs.getPropertyValue('--heat-b'),A=+cs.getPropertyValue('--heat-a')||.72;
+document.querySelectorAll('#detail canvas').forEach(cv=>{const k=+cv.dataset.k,ctx=cv.getContext('2d'),img=ctx.createImageData(24,24);for(let i=0;i<576;i++){const v=raw.charCodeAt(k*576+i)/255;const a=Math.pow(v,1.6);img.data[4*i]=R;img.data[4*i+1]=G;img.data[4*i+2]=B;img.data[4*i+3]=Math.round(255*a*A)}ctx.putImageData(img,0,0)})}
+function select(i){S.sel=i;const n=S.data.neurons[i];const u=unitList().find(u=>u.i===i);const st=n.stats;
+let html=`<h2>${u.label} ${showKind()?`<span class="kind ${n.kind}">${KINDS[n.kind]}</span>`:'<span class="kind hidden">type hidden</span>'}</h2>`;
+html+=`<div class="stats">max ${fmt(st.max)} · 99.99% ${fmt(st.p9999)} · 99.9% ${fmt(st.p999)} · 99% ${fmt(st.p99)} · min ${fmt(st.min)}${n.coherence?` · top-16 CLIP coherence ${n.coherence.top16.toFixed(3)} (random-16 baseline ${(S.data.coherenceBaseline||0).toFixed(3)})`:''}</div>`;
+if(showKind()&&n.kind!=='real')html+=`<div class="stats">largest |coefficients| of the ${n.kind==='sae'?'decoder direction':'unit-norm direction'} over ${S.data.shape[2]} neurons: ${st.topCoefficients.map(([j,c])=>`n${j} ${c>0?'+':''}${c.toFixed(3)}`).join(' · ')}${st.activeImages!==undefined?` · fires on ${st.activeImages.toLocaleString()} of ${S.data.imageCount.toLocaleString()} images`:''}${st.effectiveNeurons?` · effective neurons ${st.effectiveNeurons.toFixed(0)} (largest share ${(100*st.top1Share).toFixed(1)}%)`:''}</div>`;
+if(showKind()&&n.kind==='real'&&st.mean!==undefined)html+=`<div class="stats">unit mean ${fmt(st.mean)} · std ${fmt(st.std)} over all positions</div>`;
+if(S.mode==='blind'){const r=getRatings()[n.id]||'';html+=`<div class="rate">${['clear','partly','not interpretable'].map(v=>`<button data-v="${v}" class="${r===v?'on':''}">${v}</button>`).join('')}</div>`}
+let k=0;for(const ex of n.examples){html+=`<h3>${ex.label} <span style="text-transform:none;letter-spacing:0;font-weight:400">· ${ex.description}</span></h3><div class="row">`;for(const c of ex.cells){const pos=ex.source==='maximum';html+=`<div class="ex"><div class="crop" style="${cropStyle(n,k)}">${pos&&n.heatmaps24?`<canvas data-k="${k}" width="24" height="24"></canvas>`:''}</div><p><b>#${c.rank}</b> ${c.rankDirection==='ascending'?'lowest':'highest'} · ${fmt(c.value)}</p><p title="${c.datasetLabel}">${c.datasetLabel}</p></div>`;k++}html+='</div>'}
+$('#detail').innerHTML=html;document.querySelectorAll('.rate button').forEach(b=>b.onclick=()=>{setRating(n.id,b.dataset.v);select(i);renderRatings()});drawHeat(n);renderUnits();$('#detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+function renderSummary(){const kinds=[...new Set(S.data.neurons.map(n=>n.kind))];if(!showKind()){$('#summary').innerHTML='';return}
+const rowsHtml=kinds.map(k=>{const ns=S.data.neurons.filter(n=>n.kind===k);const pur=ns.map(n=>purity(n).k/16);const coh=ns.filter(n=>n.coherence).map(n=>n.coherence.top16);const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+return `<tr><td><span class="kind ${k}">${SHORT[k]}</span></td><td>${ns.length}</td><td>${mean(pur).toFixed(2)}</td><td>${(pur.filter(p=>p>=.5).length/ns.length).toFixed(2)}</td><td>${coh.length?mean(coh).toFixed(3):'–'}</td></tr>`}).join('');
+const saeL=S.layer.sae;$('#summary').innerHTML=`<div class="box"><table><tr><th>units</th><th>n</th><th>purity</th><th>≥½</th><th>CLIP</th></tr>${rowsHtml}</table>${saeL?`<p class="note" style="margin:6px 0 0">SAE: TopK, ${saeL.features.toLocaleString()} features, k=${saeL.k}, val FVU ${(saeL.val_fvu||0).toFixed(3)}; ${saeL.alive_ge500.toLocaleString()} features fire on ≥500 images (units sampled among those).</p>`:''}<p class="note" style="margin:6px 0 0">Purity: share of the top-16 crops whose image has the modal ImageNet class; ≥½: fraction of units with purity at least 0.5. CLIP: mean pairwise cosine of the top-16 crops (ViT-B/32)${S.data.coherenceBaseline?`; 16 random crops score ${S.data.coherenceBaseline.toFixed(3)}`:''}.</p></div>`}
+function renderRatings(){if(S.mode!=='blind'){$('#ratingBox').innerHTML='';return}const r=getRatings();const vals=['clear','partly','not interpretable'];const groups=S.revealed?[...new Set(S.data.neurons.map(n=>n.kind))]:['all'];
+const rowsHtml=groups.map(kind=>{const ns=S.data.neurons.filter(n=>kind==='all'||n.kind===kind);const cnt=vals.map(v=>ns.filter(n=>r[n.id]===v).length);const rated=cnt.reduce((a,b)=>a+b,0);return `<tr><td>${kind==='all'?'all':`<span class="kind ${kind}">${SHORT[kind]}</span>`}</td>${cnt.map(c=>`<td>${c}</td>`).join('')}<td>${rated}/${ns.length}</td></tr>`}).join('');
+$('#ratingBox').innerHTML=`<div class="box"><table><tr><th></th><th>clear</th><th>partly</th><th>not</th><th>rated</th></tr>${rowsHtml}</table></div>`}
+async function setLayer(l){S.layer=l;S.data=await loadLayer(l);S.sel=null;S.revealed=false;$('#detail').innerHTML='';renderUnits();renderSummary();renderRatings();try{history.replaceState(null,'',`#${META.dir}~${l.slug}`)}catch(e){}}
+function setModel(m,layerName){META=m;$('#sub').textContent=`${META.model} · ${META.dataset} · top-1 ${(100*META.top1Acc).toFixed(1)}% · ranked by ${META.spatialStatistic}`;
+const sel=$('#layerSel');sel.innerHTML=META.layers.map((l,i)=>`<option value="${i}">${l.name} · ${l.channels} neurons · ${l.nReal} real + ${l.nVirt+(l.nVirtStd||0)} random${l.nSae?` + ${l.nSae} SAE`:''} shown</option>`).join('');
+const li=Math.max(0,META.layers.findIndex(l=>l.name===layerName||l.slug===layerName));sel.value=li;return setLayer(META.layers[li])}
+function setMode(m){S.mode=m;S.revealed=false;$('#modeLabeled').classList.toggle('on',m==='labeled');$('#modeBlind').classList.toggle('on',m==='blind');$('#blindBox').hidden=m!=='blind';$('#ratingsOut').hidden=true;S.sel=null;$('#detail').innerHTML='';renderUnits();renderSummary();renderRatings()}
+function boot(){const first=MODELS[0];document.body.classList.add('heat');
+$('#legend').innerHTML=Object.entries(KINDS).map(([k,v])=>`<span class="kind ${k}">${v}</span>`).join('');
+$('#about').innerHTML=`Each image is ranked by the unit's strongest response anywhere in it (its maximum over positions of the block's post-GELU MLP hidden map); the negative examples by its weakest. Crops are centred on that spot with a focus window of ${first.cropGeometry.focusCropByStage.join('/')} px for stages 0–3 of the 224 px model input. Buckets: ${first.buckets.map(b=>`${b.label} (${b.description||'4 lowest minima'})`).join('; ')}. Random combinations: ${first.virtual}. ${first.virtualStd?'Equal-variance variant: '+first.virtualStd+'. ':''}Heatmap overlay (toggle in the rail): the unit's spatial activation map on the crop window, positive part, scaled so the image's maximum is 1, drawn at 24×24 and smoothed; orange = where the unit fires. Layout and bucket scheme follow the Goodfire "Neural Networks Are Already Clean" microscope. ImageNet-1k validation, 50,000 centre crops, for every model.`;
+const msel=$('#modelSel');msel.innerHTML=MODELS.map((m,i)=>`<option value="${i}">${m.model.replace('facebook/','')} · top-1 ${(100*m.top1Acc).toFixed(1)}%</option>`).join('');msel.onchange=()=>setModel(MODELS[+msel.value]);
+$('#layerSel').onchange=()=>setLayer(META.layers[+$('#layerSel').value]);
+$('#modeLabeled').onclick=()=>setMode('labeled');$('#modeBlind').onclick=()=>setMode('blind');
+$('#heatToggle').onclick=()=>{document.body.classList.toggle('heat');$('#heatToggle').classList.toggle('on')};
+$('#reveal').onclick=()=>{S.revealed=true;renderUnits();renderSummary();renderRatings();if(S.sel!==null)select(S.sel)};
+$('#copyBtn').onclick=()=>{const r=getRatings();const out=JSON.stringify({model:META.model,layer:S.layer.name,ratings:S.data.neurons.filter(n=>r[n.id]).map(n=>({id:n.id,kind:n.kind,rating:r[n.id]}))},null,1);const ta=$('#ratingsOut');ta.value=out;ta.hidden=false;try{navigator.clipboard.writeText(out).then(()=>{$('#copyBtn').textContent='Copied'},()=>{ta.select()})}catch(e){ta.select()}};
+$('#clearBtn').onclick=()=>{try{localStorage.removeItem(ratingsKey())}catch(e){}renderUnits();renderRatings();if(S.sel!==null)select(S.sel)};
+const want=(location.hash||'').replace('#','').split('~');const mi=Math.max(0,MODELS.findIndex(m=>m.dir===want[0]));msel.value=mi;setModel(MODELS[mi],want[1]||'')}
+boot();
+</script>

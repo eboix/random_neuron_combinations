@@ -1,0 +1,121 @@
+{
+ "title": "deit-base-patch16-224 ImageNet-1k val microscope",
+ "model": "facebook/deit-base-patch16-224",
+ "dataset": "ImageNet-1k validation, 50,000 center crops (256 -> 224)",
+ "spatialStatistic": "maximum post-GELU MLP hidden activation per image",
+ "virtual": "K Gaussian unit-norm directions in the raw hidden space (seed per run, generator shared across layers in block order)",
+ "top1Acc": 0.80196,
+ "exampleSheet": {
+  "cell": 96,
+  "columns": 16,
+  "rows": 3,
+  "cells": 44,
+  "positiveCells": 40
+ },
+ "cropGeometry": {
+  "inputCenterCrop": 224,
+  "sourceImage": [
+   224,
+   224
+  ],
+  "focusCropByStage": [
+   64,
+   96,
+   144,
+   192
+  ],
+  "preprocess": {
+   "resize": [
+    224,
+    224
+   ],
+   "crop": 224,
+   "mean": [
+    0.5,
+    0.5,
+    0.5
+   ],
+   "std": [
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  "arch": "vit"
+ },
+ "buckets": [
+  {
+   "id": "top16",
+   "label": "Top 16",
+   "description": "strongest image maxima",
+   "count": 16
+  },
+  {
+   "id": "p9999",
+   "label": "99.99%",
+   "description": "around the 5th-highest image",
+   "count": 8
+  },
+  {
+   "id": "p999",
+   "label": "99.9%",
+   "description": "around the 50th-highest image",
+   "count": 8
+  },
+  {
+   "id": "p99",
+   "label": "99%",
+   "description": "around the 500th-highest image",
+   "count": 8
+  },
+  {
+   "id": "bottom4",
+   "label": "Most negative",
+   "count": 4
+  }
+ ],
+ "layers": [
+  {
+   "name": "layer11",
+   "slug": "layer11",
+   "stage": 2,
+   "focus": 144,
+   "channels": 3072,
+   "kVirtual": 128,
+   "data": "data/layer11.json",
+   "nReal": 32,
+   "nVirt": 32,
+   "nSae": 0,
+   "nVirtStd": 32
+  },
+  {
+   "name": "layer5",
+   "slug": "layer5",
+   "stage": 2,
+   "focus": 144,
+   "channels": 3072,
+   "kVirtual": 128,
+   "data": "data/layer5.json",
+   "nReal": 32,
+   "nVirt": 32,
+   "nSae": 0,
+   "nVirtStd": 32
+  },
+  {
+   "name": "layer8",
+   "slug": "layer8",
+   "stage": 2,
+   "focus": 144,
+   "channels": 3072,
+   "kVirtual": 128,
+   "data": "data/layer8.json",
+   "nReal": 32,
+   "nVirt": 32,
+   "nSae": 0,
+   "nVirtStd": 32
+  }
+ ],
+ "dir": "deit-base-patch16-224",
+ "virtualStd": "equal-variance variant: Gaussian coefficients divided by each unit's activation std before normalising",
+ "coherence": "mean pairwise CLIP ViT-B/32 cosine similarity among the top-16 crops (label-free coherence); baseline = 16 crops drawn at random across all units of the layer"
+}
