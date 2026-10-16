@@ -85,7 +85,8 @@
    "data": "data/layer11.json",
    "nReal": 32,
    "nVirt": 32,
-   "nSae": 0
+   "nSae": 0,
+   "nVirtStd": 32
   },
   {
    "name": "layer5",
@@ -97,7 +98,8 @@
    "data": "data/layer5.json",
    "nReal": 32,
    "nVirt": 32,
-   "nSae": 0
+   "nSae": 0,
+   "nVirtStd": 32
   },
   {
    "name": "layer8",
@@ -109,7 +111,8 @@
    "data": "data/layer8.json",
    "nReal": 32,
    "nVirt": 32,
-   "nSae": 0
+   "nSae": 0,
+   "nVirtStd": 32
   }
  ],
  "dir": "vit-base-patch16-224",

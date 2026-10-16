@@ -75,13 +75,16 @@ dropped), a 14×14 map with stride 16 and a 144 px focus crop. Layers 5, 8, 11 o
 | DeiT-base 86M (80.2 %) | layer11 (last) | **0.711** | 0.662 | 0.648 | 0.635 | p = 0.0007 |
 | DeiT-base | layer8 | **0.703** | 0.662 | 0.681 | 0.638 | p = 0.001 |
 | DeiT-base | layer5 | 0.664 | 0.650 | 0.646 | 0.640 | p = 0.15 |
-| ViT-B/16 (google, 80.3 %) | layers 5/8/11 | (pipeline running) | | | | |
+| ViT-B/16 86M (80.3 %, in21k→1k) | layer11 (last) | **0.709** | 0.679 | 0.656 | 0.632 | p = 0.02 |
+| ViT-B/16 | layer8 | **0.717** | 0.640 | 0.664 | 0.630 | p = 2e-7 |
+| ViT-B/16 | layer5 | 0.665 | 0.664 | 0.678 | 0.632 | p = 0.91 |
 
 ViTs are less uniform than ConvNeXts. In DeiT-small the last block's patch-token neurons are barely more
 coherent than random directions and both sit near the random-crop baseline (the class read-out goes through
 the CLS token, so last-layer patch MLP units need not be "class neurons"); its clean neurons are in the
-middle (layer 8). In DeiT-base the ConvNeXt pattern returns: layers 8 and 11 real ≫ random (p ≈ 1e-3) and
-only the early layer 5 sits near baseline for every kind. At layer 5 a random direction in the *standardised* basis can be as clean as a neuron: e.g.
+middle (layer 8). In DeiT-base and ViT-B/16 the ConvNeXt pattern returns: layers 8 and 11 real ≫ random
+(p from 0.02 down to 2e-7) and only the early layer 5 sits near baseline for every kind, with random
+directions there as coherent as neurons (early-layer features are redundant colour/texture families). At layer 5 a random direction in the *standardised* basis can be as clean as a neuron: e.g.
 eq-var unit 94 is a piano-keyboard detector spread over ~136 effective neurons (largest weight 4 %), so
 early ViT layers hold redundant texture families that any even mixture picks up. Caveat on the eq-var
 variant: where the unit-std distribution is heavy-tailed (DeiT layer 8: median effective neurons 36, up to
