@@ -77,8 +77,14 @@
    "data": "data/stage3_block2.json",
    "nReal": 32,
    "nVirt": 32,
-   "nSae": 0,
-   "nVirtStd": 32
+   "nSae": 32,
+   "nVirtStd": 32,
+   "sae": {
+    "features": 24576,
+    "k": 32,
+    "val_fvu": 0.0654421285665175,
+    "alive_ge500": 3843
+   }
   }
  ],
  "virtualStd": "equal-variance variant: Gaussian coefficients divided by each unit's activation std before normalising",

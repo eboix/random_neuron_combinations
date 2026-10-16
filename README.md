@@ -72,12 +72,16 @@ dropped), a 14×14 map with stride 16 and a 144 px focus crop. Layers 5, 8, 11 o
 | DeiT-small 22M (80.2 %) | layer11 (last) | 0.652 | 0.641 | 0.626 | 0.617 | p = 0.26 |
 | DeiT-small | layer8 | **0.727** | 0.685 | 0.648 | 0.625 | p = 0.006 (vs eq-var 3e-6) |
 | DeiT-small | layer5 | 0.691 | 0.653 | **0.712** | 0.634 | p = 0.002 (vs eq-var 0.22) |
-| DeiT-base / ViT-B/16 | | (pipelines running) | | | | |
+| DeiT-base 86M (80.2 %) | layer11 (last) | **0.711** | 0.662 | 0.648 | 0.635 | p = 0.0007 |
+| DeiT-base | layer8 | **0.703** | 0.662 | 0.681 | 0.638 | p = 0.001 |
+| DeiT-base | layer5 | 0.664 | 0.650 | 0.646 | 0.640 | p = 0.15 |
+| ViT-B/16 (google, 80.3 %) | layers 5/8/11 | (pipeline running) | | | | |
 
-ViTs look different from ConvNeXts. The last block's patch-token neurons are barely more coherent than
-random directions and both sit near the random-crop baseline (the class read-out goes through the CLS token,
-so last-layer patch MLP units are not the "class neurons" of a ConvNeXt). The clean neurons are in the middle
-(layer 8). At layer 5 a random direction in the *standardised* basis can be as clean as a neuron: e.g.
+ViTs are less uniform than ConvNeXts. In DeiT-small the last block's patch-token neurons are barely more
+coherent than random directions and both sit near the random-crop baseline (the class read-out goes through
+the CLS token, so last-layer patch MLP units need not be "class neurons"); its clean neurons are in the
+middle (layer 8). In DeiT-base the ConvNeXt pattern returns: layers 8 and 11 real ≫ random (p ≈ 1e-3) and
+only the early layer 5 sits near baseline for every kind. At layer 5 a random direction in the *standardised* basis can be as clean as a neuron: e.g.
 eq-var unit 94 is a piano-keyboard detector spread over ~136 effective neurons (largest weight 4 %), so
 early ViT layers hold redundant texture families that any even mixture picks up. Caveat on the eq-var
 variant: where the unit-std distribution is heavy-tailed (DeiT layer 8: median effective neurons 36, up to
@@ -91,8 +95,19 @@ k = 32, aux-k loss for dead latents, 10k steps of 4096 positions) trained on the
 activations at every position of 100k ImageNet **train** center crops, then scored on the 50k val images
 with the same max-over-positions statistic. Features are a learned thresholded linear readout in the
 same space as neurons and random directions, so all three are visualised identically; the builder samples
-32 features that fire on ≥ 500 val images. Results: see the viewer's `SAE` units and the table below once
-the chains finish (`slurm/logs/sae_*_s3b2.log`).
+32 features that fire on ≥ 500 val images. Training needed dead-latent resampling (every 500 steps until 75 %
+of training; the aux-k loss alone let the dictionary collapse) and ends with many dead latents
+(tiny: 6.8k of 24.6k alive, 3.8k firing on ≥ 500 val images, holdout FVU 0.059, val FVU 0.065).
+
+| model / layer | real neurons | SAE features | random | baseline | SAE vs real |
+|---|---|---|---|---|---|
+| tiny stage3.block2 | 0.696 (sd .075), purity 0.40 | **0.695** (sd .076), purity 0.41 | 0.619 | 0.613 | p = 0.9, P(SAE>real) = 0.49 |
+| base stage3.block2 | 0.681 | (chain running) | 0.611 | 0.613 | |
+
+At the last block of ConvNeXt-tiny, SAE features and neurons are indistinguishable on both metrics and
+on inspection (SAE: howler monkeys in trees, trolleybuses, food on plates; neurons: Angora rabbits, china
+cabinets, fruit displays; each kind has a similar tail of mixed units). The SAE does not find cleaner
+features than the neuron basis here, which is the "already clean" claim in its simplest form.
 
 ## Repository contents
 

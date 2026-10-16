@@ -40,7 +40,7 @@ def main():
     for n in d['neurons']:
         E = embs[n['id']]
         out['units'][n['id']] = {'kind': n['kind'], 'top16': coh(E[:16]), 'p999': coh(E[24:32]), 'p99': coh(E[32:40])}
-    for kind in ['real', 'virt']:
+    for kind in sorted({u['kind'] for u in out['units'].values()}):
         v = np.array([u['top16'] for u in out['units'].values() if u['kind'] == kind])
         p = np.array([u['p99'] for u in out['units'].values() if u['kind'] == kind])
         print(f'{args.layer} {kind}: top16 CLIP coherence mean={v.mean():.3f} median={np.median(v):.3f} (min {v.min():.3f}, max {v.max():.3f}); p99 bucket mean={p.mean():.3f}; random-16 baseline={base:.3f}')
