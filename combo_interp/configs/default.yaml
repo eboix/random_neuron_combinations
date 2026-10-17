@@ -1,0 +1,134 @@
+# Full study config. Everything here is a *choice*; see README "Design decisions".
+experiment: combo_interp_v1
+seed: 0
+
+paths:
+  data_root: data          # override with env COMBO_DATA_ROOT (e.g. cluster scratch)
+  private_root: private    # blinding key + ground truth. NEVER put inside an agent workspace.
+  jobs_dir: jobs
+
+cluster:                   # used only by scripts/make_job.py to print exact commands
+  host: "CHANGEME@login.cluster.edu"
+  remote_dir: "/scratch/CHANGEME/combo_interp"
+  partition: "CHANGEME"
+  gres: "gpu:1"
+  time: "08:00:00"
+  mem: "96G"
+  cpus: 8
+  setup: |                 # lines run at the top of every sbatch script (edit!)
+    module load python cuda
+    source $HOME/venvs/combo/bin/activate
+    export HF_HUB_OFFLINE=1
+    export TOKENIZERS_PARALLELISM=false
+
+runtime:
+  early_stop: true          # abort forward after the deepest cached layer (set false if your transformers version
+                            # misbehaves when an exception is raised inside forward)
+
+model:
+  name: Qwen/Qwen3-8B       # HF id or local path (compute nodes are usually offline: pre-download)
+  dtype: bfloat16
+  attn_implementation: sdpa
+  layers: [9, 18, 27]       # early / middle / late (Qwen3-8B has 36 layers)
+
+corpus:
+  seq_len: 2048
+  min_len: 64
+  holdout_modulus: 10       # doc i of a source stream is holdout iff i % modulus == 0
+  shard_seqs: 4000
+  text_cap_chars: 20000
+  splits:
+    train:   {tokens: 50000000}
+    holdout: {tokens: 5000000}
+  sources:                  # dataset ids could not be verified offline -> check on a login node
+    - {name: fineweb,     kind: hf, hf_id: HuggingFaceFW/fineweb,     subset: sample-10BT, split: train, text_field: text,    weight: 0.40}
+    - {name: fineweb_edu, kind: hf, hf_id: HuggingFaceFW/fineweb-edu, subset: sample-10BT, split: train, text_field: text,    weight: 0.15}
+    - {name: code,        kind: hf, hf_id: codeparrot/codeparrot-clean,                    split: train, text_field: content, weight: 0.20}
+    - {name: wiki_en,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.en, split: train, text_field: text, weight: 0.05}
+    - {name: wiki_de,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.de, split: train, text_field: text, weight: 0.04}
+    - {name: wiki_fr,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.fr, split: train, text_field: text, weight: 0.04}
+    - {name: wiki_es,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.es, split: train, text_field: text, weight: 0.04}
+    - {name: wiki_ru,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.ru, split: train, text_field: text, weight: 0.03}
+    - {name: wiki_ja,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.ja, split: train, text_field: text, weight: 0.03}
+    - {name: wiki_bn,     kind: hf, hf_id: wikimedia/wikipedia, subset: 20231101.bn, split: train, text_field: text, weight: 0.02}
+
+stats:                      # pass 1: mean / covariance of the MLP hidden activation (defines the unit set)
+  n_tokens: 4000000
+  max_batch_tokens: 16384
+  skip_first_tokens: 1      # position 0 is an attention-sink with massive activations; excluded everywhere
+
+units:
+  per_condition: 200        # units cached per (layer, condition); agents explain a subset (agents.units_per_condition_per_layer)
+  min_std: 1.0e-6
+  whiten_ridge: 0.01        # ZCA ridge = ridge * mean eigenvalue
+  standardize_sparse_inputs: true   # k-sparse / related combos weight z-scored neurons, so no neuron dominates by scale
+  conditions:
+    - {name: neuron,      kind: neuron}
+    - {name: dense_raw,   kind: dense_raw}
+    - {name: dense_white, kind: dense_white}
+    - {name: ksparse_2,   kind: ksparse, k: 2}
+    - {name: ksparse_5,   kind: ksparse, k: 5}
+    - {name: ksparse_20,  kind: ksparse, k: 20}
+    - {name: ksparse_100, kind: ksparse, k: 100}
+    - {name: related_5,   kind: related, k: 5}
+    - {name: related_20,  kind: related, k: 20}
+
+cache:                      # pass 2: stream corpus, project onto all units, keep top-k / windows / uniform sample
+  max_batch_tokens: 16384
+  skip_first_tokens: 1
+  k_big: 1024               # per pole, per unit: strongest firings (token index + value)
+  k_prof: 64                # per pole, per unit: strongest firings *with per-token activation window*
+  window_before: 48
+  window_after: 16
+  uniform_samples: 200000   # random tokens with activations of ALL units (bulk of the distribution)
+  record_gate_up: true      # neuron units: store SwiGLU gate/value at top firings (sign-regime analysis)
+  ckpt_every: 400
+  train_tokens: 50000000
+  holdout: {tokens: 5000000, k_big: 256, k_prof: 0, uniform_samples: 50000}
+
+export:                     # what agents see
+  k_examples: 24
+  dedupe_max_per_seq: 1
+  long_before: 384
+  long_after: 32
+  long_n: 12
+  tier_n: 6
+  tier_edges: [0.5, 0.3, 0.1]   # strong >= .5 of max, moderate >= .3, weak >= .1
+  random_n: 8
+  other_pole_n: 8
+  mark_threshold: 0.1       # tokens with >= this fraction of max get an inline activation tag
+  context_before_tiers: 32
+  context_after_tiers: 8
+  holdout_top_items: 10
+  holdout_random_items: 10
+  holdout_before: 40
+  holdout_after: 8
+
+agents:
+  units_per_condition_per_layer: 40
+  backend: claude           # claude | fake
+  claude_cmd: claude
+  model: sonnet             # alias understood by the claude CLI
+  max_turns: {explain: 40, blindmax: 10, simulate: 10}
+  timeout_s: 1500
+  concurrency: 4
+  retries: 1
+  allowed_tools: ["Read", "Write", "Bash(python:*)"]
+
+probe:
+  max_tokens: 256
+  batch_tokens: 8192
+
+scoring:
+  strong_frac: 0.30         # "fires strongly" = >= 30% of the unit's corpus maximum (same convention as the essay)
+  n_null: 5                 # other units' predicted-fire texts scored on this unit (chance baseline)
+  n_rand: 5                 # random corpus-document prefixes scored on this unit
+  rand_prefix_tokens: 60
+
+analysis:
+  n_boot: 2000
+  ci: 0.90                  # two one-sided tests at alpha=.05  <=> 90% CI inside the equivalence margin
+  equiv_margin:             # pre-registered; change BEFORE looking at agent results
+    margin: 0.10            # rate_pred - rate_near, on a 0-1 scale
+    sim_spearman: 0.10
+    blind_max_logratio: 0.25   # log(blind-max / corpus-max)

@@ -1,0 +1,13 @@
+numpy
+pandas
+scipy
+matplotlib
+pyyaml
+tqdm
+# GPU / model side (cluster + local tiny test)
+torch
+transformers>=4.51      # Qwen3 support
+datasets                # only needed for scripts/00_prepare_corpus.py
+# optional
+# sentence-transformers  # pilot: embedding coherence (python scripts/04_pilot.py --embed)
+# pytest

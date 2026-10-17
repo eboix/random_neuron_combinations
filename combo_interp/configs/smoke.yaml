@@ -1,0 +1,31 @@
+# Tiny config for tests / dry runs (random tiny Llama + synthetic byte corpus; see tests/).
+base: default.yaml
+paths: {data_root: /tmp/combo_smoke/data, private_root: /tmp/combo_smoke/private, jobs_dir: /tmp/combo_smoke/jobs}
+model: {name: __tiny__, dtype: float32, layers: [1, 2]}
+corpus: {seq_len: 96, min_len: 16, shard_seqs: 64, splits: {train: {tokens: 40000}, holdout: {tokens: 8000}}}
+stats: {n_tokens: 20000, max_batch_tokens: 2048}
+units:
+  per_condition: 12
+  whiten_ridge: 0.05
+  conditions:
+    - {name: neuron,      kind: neuron}
+    - {name: dense_raw,   kind: dense_raw}
+    - {name: dense_white, kind: dense_white}
+    - {name: ksparse_2,   kind: ksparse, k: 2}
+    - {name: ksparse_5,   kind: ksparse, k: 5}
+    - {name: related_5,   kind: related, k: 5}
+cache:
+  max_batch_tokens: 2048
+  k_big: 64
+  k_prof: 16
+  window_before: 12
+  window_after: 4
+  uniform_samples: 2000
+  ckpt_every: 5
+  train_tokens: 40000
+  holdout: {tokens: 8000, k_big: 32, k_prof: 0, uniform_samples: 500}
+export: {k_examples: 6, long_before: 40, long_after: 8, long_n: 3, tier_n: 3, random_n: 4, other_pole_n: 3, holdout_top_items: 4, holdout_random_items: 4, holdout_before: 12, holdout_after: 3, context_before_tiers: 10, context_after_tiers: 3}
+agents: {units_per_condition_per_layer: 6, backend: fake, concurrency: 1}
+probe: {max_tokens: 64, batch_tokens: 1024}
+scoring: {rand_prefix_tokens: 20}
+analysis: {n_boot: 200}

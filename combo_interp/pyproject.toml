@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "combo_interp"
+version = "0.1.0"
+description = "Are random linear combinations of MLP neurons as interpretable as neurons? Agentic interpretability pipeline."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy", "pandas", "scipy", "matplotlib", "pyyaml", "tqdm",
+]
+
+[project.optional-dependencies]
+gpu = ["torch", "transformers>=4.51", "datasets", "accelerate"]
+embed = ["sentence-transformers"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]

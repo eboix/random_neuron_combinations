@@ -1,0 +1,7 @@
+data/
+private/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+jobs/done/*
+!jobs/done/.gitkeep
