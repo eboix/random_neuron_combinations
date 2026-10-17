@@ -72,7 +72,9 @@ python scripts/06_build_probe_job.py --round 2
 python scripts/make_job.py probe --name probe_r2 --input data/probe/round2_in.jsonl
 python scripts/08_score_and_analyze.py --probe jobs/done/*probe_r1/probe_out.jsonl jobs/done/*probe_r2/probe_out.jsonl
 ```
-Dry-run everything without a GPU or API spend: `--config configs/smoke.yaml` (agent backend `fake`).
+Dress rehearsal of every stage on a laptop (real datasets, Qwen3-0.6B on CPU, fake agents, ~10 min, data in
+`/tmp/combo_local`): run the Quick start commands with `--config configs/local_qwen3_0.6b.yaml`, calling
+`07_probe.py --job-file ... --out ...` directly instead of `make_job.py probe`. Use a released Python (not a 3.13 alpha).
 
 ## What the agents do (and how the comparison is kept fair)
 
@@ -114,7 +116,7 @@ dose-response plot. "Equally interpretable" is only meaningful at comparable com
 
 1. Torch-side code is verified only by the test suite you run (see top). Cluster-specific issues (module names, offline HF) are in `cluster.setup`.
 2. HF dataset ids/configs in the config could not be checked offline.
-3. Agent isolation is by folder, not by OS: an agent with `Bash` could in principle read `private/`. For a clean study run agents in a container/separate user with only `data/agent_work` mounted.
+3. Agent isolation is by folder, not by OS: an agent with `Bash` could in principle read `private/`. For a clean study run agents in a container/separate user with only the agent workspace mounted. Workspaces live in `paths.agent_work_root` (default `~/combo_agent_work`, env `COMBO_AGENT_WORK`); the `claude` backend refuses to start if a `CLAUDE.md` sits in or above it, because `claude -p` would load it into every agent.
 4. 9 conditions × 4 metrics = 36 tests, no multiplicity correction; the pre-registered margins and the TOST framing are the guard. Units are treated as independent.
 5. The explainer, blind-max writer and simulator are the same model family: shared blind spots (e.g. the noun bias the essay describes) affect all conditions but not necessarily equally.
 6. Interventions (`interventions.py`: ablate/steer/clamp a unit) are implemented and tested but not wired into the agent rounds — steering is the essay's strongest evidence type and a natural v2.

@@ -67,6 +67,9 @@ class Paths:
         self.data = Path(os.environ.get("COMBO_DATA_ROOT", cfg.paths.data_root))
         self.private = Path(os.environ.get("COMBO_PRIVATE_ROOT", cfg.paths.private_root))
         self.jobs = Path(cfg.paths.get("jobs_dir", "jobs"))
+        # agent workspaces must not sit under a folder with a CLAUDE.md (claude -p would load it into every agent)
+        aw = os.environ.get("COMBO_AGENT_WORK", cfg.paths.get("agent_work_root"))
+        self.agent_work_root = Path(aw).expanduser() if aw else self.data / "agent_work"
 
     def corpus(self, split: str) -> Path:
         return self.data / "corpus" / split
@@ -85,7 +88,7 @@ class Paths:
         return self.data / "agent_cache"
 
     def agent_work(self, stage: str) -> Path:
-        return self.data / "agent_work" / stage
+        return self.agent_work_root / stage
 
     def agent_results(self, stage: str) -> Path:
         return self.data / "agent_results" / stage

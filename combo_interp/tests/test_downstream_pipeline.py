@@ -39,8 +39,9 @@ def test_full_downstream():
         assert len(index) > 100 and len(sel) == 6 * 6 * 2           # 6 per (layer, condition)
         assert set(sel) <= set(ref)
         blob = (paths.agent_cache / f"{sel[0]}.json").read_text() + (paths.agent_cache / f"{sel[0]}.md").read_text()
-        for leak in ("dense", "ksparse", "related", "neuron", "kurtosis", "cond"):     # agents must not see these
+        for leak in ("dense", "ksparse", "related", "neuron", "kurtosis", "cond", "rarity", "distinct"):  # agents must not see these
             assert leak not in blob.lower(), f"leak: {leak}"
+        assert "frac_tokens_ge_10pct_of_max" in ref[sel[0]]                          # kept privately instead
         d = read_json(paths.agent_cache / f"{sel[0]}.json")
         assert d["examples"]["primary"] and "[[" in d["examples"]["primary"][0]["text"]
         assert all(0 <= e["frac"] <= 1.0001 for e in d["examples"]["primary"])      # fractions of the corpus max
@@ -80,3 +81,15 @@ def test_full_downstream():
         assert len(summarize_pilot(pdf, n_boot=50)) > 0
         print("pilot median token entropy by condition:", {k: round(v, 3) for k, v in med.items()})
         print("fake-explainer margin by condition:", df.groupby("cond").margin.mean().round(2).to_dict())
+
+
+def test_claude_backend_refuses_workspace_under_claude_md():
+    from pathlib import Path
+    import pytest
+    from combo_interp.agents.run import instruction_files_above
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "CLAUDE.md").write_text("project rules")
+        cfg, paths = smoke_cfg(tmp, ["agents.backend=claude"])
+        assert instruction_files_above(paths.agent_work("explain").parent) == [Path(tmp).resolve() / "CLAUDE.md"]
+        with pytest.raises(RuntimeError, match="breaks blinding"):
+            run_stage(cfg, paths, "explain", log=lambda *_: None)

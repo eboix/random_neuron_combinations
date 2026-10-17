@@ -71,7 +71,8 @@ def _fake(stage, work, paths, blind, rng):
         toks = [t for t, _ in d["token_stats"]["primary"]["fires_on"][:3]]
         pad = lambda lst, fill: (lst + [fill] * 5)[:5]
         obj = {"explanation": f"Fires on tokens such as {toks}.", "fires_on": "on the listed tokens",
-               "parts": [str(t) for t in toks[:2]] or ["unclear"], "other_pole": "", "confidence": 3,
+               "parts": [repr(t) for t in toks[:2]] or ["unclear"],     # repr: whitespace tokens stay non-empty
+               "other_pole": "", "confidence": 3,
                "predicted_fire": pad(top, "alpha beta"), "near_miss": pad(rnd, "gamma delta"),
                "distant": ["The recipe calls for two cups of flour.", "Quantum chromodynamics is hard.",
                            "He sailed across the bay at dawn.", "Invoice number 4471 is overdue.",
@@ -129,7 +130,24 @@ def run_one(cfg, paths, stage, blind):
     return blind, "failed", info
 
 
+def instruction_files_above(path) -> list[Path]:
+    """CLAUDE.md-style files that `claude -p` started in `path` would load into the agent's context."""
+    found = []
+    for d in [Path(path).resolve(), *Path(path).resolve().parents]:
+        for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
+            if (d / name).is_file():
+                found.append(d / name)
+    return found
+
+
 def run_stage(cfg, paths, stage, limit=None, only=None, log=print, dry_run=False):
+    if cfg.agents.backend == "claude":
+        paths.agent_work(stage).mkdir(parents=True, exist_ok=True)
+        leaks = instruction_files_above(paths.agent_work(stage))
+        if leaks:
+            raise RuntimeError(f"agent workspaces under {paths.agent_work(stage)} would load {[str(p) for p in leaks]} "
+                               f"into every agent (breaks blinding). Set COMBO_AGENT_WORK (or paths.agent_work_root) "
+                               f"to a folder with no CLAUDE.md above it, e.g. ~/combo_agent_work.")
     sel = read_json(paths.agent_cache / "selection.json")
     if only:
         sel = [b for b in sel if b in set(only)]

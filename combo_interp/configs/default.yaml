@@ -5,6 +5,7 @@ seed: 0
 paths:
   data_root: data          # override with env COMBO_DATA_ROOT (e.g. cluster scratch)
   private_root: private    # blinding key + ground truth. NEVER put inside an agent workspace.
+  agent_work_root: ~/combo_agent_work   # env COMBO_AGENT_WORK wins. Must have no CLAUDE.md above it (checked)
   jobs_dir: jobs
 
 cluster:                   # used only by scripts/make_job.py to print exact commands

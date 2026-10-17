@@ -7,10 +7,13 @@ def load_model(cfg, device="cuda"):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    import transformers
     m = cfg.model
     tok = AutoTokenizer.from_pretrained(m.name)
+    major_minor = tuple(int(x) for x in transformers.__version__.split(".")[:2])
+    dtype_kw = "dtype" if major_minor >= (4, 56) else "torch_dtype"     # renamed in 4.56; old name deprecated in 5.x
     model = AutoModelForCausalLM.from_pretrained(
-        m.name, torch_dtype=getattr(torch, m.dtype),
+        m.name, **{dtype_kw: getattr(torch, m.dtype)},
         attn_implementation=m.get("attn_implementation", "sdpa"))
     model.to(device).eval()
     for p in model.parameters():

@@ -1,6 +1,6 @@
 # Tiny config for tests / dry runs (random tiny Llama + synthetic byte corpus; see tests/).
 base: default.yaml
-paths: {data_root: /tmp/combo_smoke/data, private_root: /tmp/combo_smoke/private, jobs_dir: /tmp/combo_smoke/jobs}
+paths: {data_root: /tmp/combo_smoke/data, private_root: /tmp/combo_smoke/private, jobs_dir: /tmp/combo_smoke/jobs, agent_work_root: null}
 model: {name: __tiny__, dtype: float32, layers: [1, 2]}
 corpus: {seq_len: 96, min_len: 16, shard_seqs: 64, splits: {train: {tokens: 40000}, holdout: {tokens: 8000}}}
 stats: {n_tokens: 20000, max_batch_tokens: 2048}

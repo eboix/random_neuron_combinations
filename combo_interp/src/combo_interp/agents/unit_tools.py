@@ -56,7 +56,6 @@ def main():
         print(f"{n} matches")
     elif a.cmd == "stats":
         print(json.dumps({"layer": d["layer"], "primary_pole": d["primary_pole"],
-                          "n_distinct_docs_top100": d["n_distinct_docs_top100"], "rarity": d["rarity"],
                           "n_examples": {k: len(v) for k, v in d["tiers"].items()} |
                           {"primary": len(d["examples"]["primary"]), "other": len(d["examples"]["other"]),
                            "random": len(d["random"])}}, indent=1))

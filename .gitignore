@@ -9,3 +9,5 @@ microscope/*/examples/
 microscope/*/heatmaps/
 microscope/*/data/*.json
 !microscope/*/data/*_coherence.json
+.venv/
+.DS_Store

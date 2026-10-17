@@ -1,0 +1,21 @@
+# Laptop dress rehearsal of the real pipeline: real HF datasets + real Qwen3 architecture/tokenizer, tiny budgets,
+# CPU, fake agents (no API spend). Checks plumbing only; numbers from this run mean nothing.
+#   for s in ...; python scripts/<stage>.py --config configs/local_qwen3_0.6b.yaml   (see README "Quick start")
+base: default.yaml
+paths: {data_root: /tmp/combo_local/data, private_root: /tmp/combo_local/private, jobs_dir: /tmp/combo_local/jobs,
+        agent_work_root: /tmp/combo_local/agent_work}
+model: {name: Qwen/Qwen3-0.6B, dtype: float32, layers: [7, 14, 21]}   # 28 layers, d_ff 3072
+corpus: {seq_len: 512, splits: {train: {tokens: 150000}, holdout: {tokens: 30000}}}
+stats: {n_tokens: 100000, max_batch_tokens: 4096}
+units: {per_condition: 50}
+cache:
+  max_batch_tokens: 4096
+  k_big: 128
+  k_prof: 32
+  uniform_samples: 20000
+  ckpt_every: 10
+  train_tokens: 150000
+  holdout: {tokens: 30000, k_big: 64, k_prof: 0, uniform_samples: 5000}
+agents: {units_per_condition_per_layer: 4, backend: fake, concurrency: 4}
+probe: {max_tokens: 128, batch_tokens: 4096}
+analysis: {n_boot: 300}

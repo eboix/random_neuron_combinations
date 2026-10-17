@@ -114,7 +114,8 @@ def plot_pilot(df: pd.DataFrame, outdir):
     fig, axes = plt.subplots(1, len(metrics), figsize=(4.2 * len(metrics), 4), squeeze=False)
     for ax, mname in zip(axes[0], metrics):
         data = [df[df.cond == c][mname].dropna().to_numpy() for c in conds]
-        ax.boxplot(data, labels=conds, showfliers=False)
+        ax.boxplot(data, showfliers=False)
+        ax.set_xticks(range(1, len(conds) + 1), conds)       # boxplot(labels=) was removed in matplotlib 3.11
         ax.set_title(mname); ax.tick_params(axis="x", rotation=70)
         if mname == "kurtosis":
             ax.set_yscale("symlog")

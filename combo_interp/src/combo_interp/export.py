@@ -203,11 +203,7 @@ def render_view_md(d):
              "Marker legend: `[[tok|f]]` = the token this example was selected for; `«tok|f»` = other tokens in the window "
              "that also fire (f = fraction of the unit's corpus maximum on this pole, so 1.00 = strongest ever seen). "
              "`↵` = newline. Windows are short; use `python unit_tools.py show --long` for longer context.", ""]
-    if d["n_distinct_docs_top100"] is not None:
-        lines.append(f"Among the 100 strongest firings, {d['n_distinct_docs_top100']} distinct documents. "
-                     f"Fraction of random tokens firing >=10% of max: {d['rarity']['frac_tokens_ge_10pct_of_max']:.4f}; "
-                     f">=30%: {d['rarity']['frac_tokens_ge_30pct_of_max']:.4f}.")
-    lines += ["", "## Strongest firings, primary pole (one per document)"]
+    lines += ["## Strongest firings, primary pole (one per document)"]
     for e in d["examples"]["primary"]:
         lines.append(f"{e['i']:>2}. [{e['frac']:.2f}] {e['text']}")
     lines += ["", "## Token statistics, primary pole", f"fires on: {d['token_stats']['primary']['fires_on']}",
@@ -273,6 +269,8 @@ def build_agent_cache(cfg, paths, tok, log=print):
                 continue
             data = build_unit_data(col, blind, L, s, ref, ref_o if np.isfinite(ref_o) else 0.0, big, prof,
                                    uacts, ugid, tr_store, dec, E, rng)
+            # sparsity statistics separate neurons from Gaussian-like combos: private, not shown to agents
+            hidden = {"n_distinct_docs_top100": data.pop("n_distinct_docs_top100"), **data.pop("rarity")}
             write_json(out_dir / f"{blind}.json", data)
             (out_dir / f"{blind}.md").write_text(render_view_md(data))
             # holdout items for the simulation score
@@ -297,7 +295,7 @@ def build_agent_cache(cfg, paths, tok, log=print):
             ms = moments_stats(mom, col)
             unit_ref[blind] = {"unit_id": uid, "layer": L, "cond": m["cond"], "kind": m["kind"], "k": m["k"],
                                "primary": s, "ref": ref, "ref_other": ref_o, "std": float(std_u[col]), **{
-                                   k: ms[k] for k in ("kurtosis", "frac_gt3", "frac_gt5")}}
+                                   k: ms[k] for k in ("kurtosis", "frac_gt3", "frac_gt5")}, **hidden}
             index.append({"blind_id": blind, "layer": L})
             by_cell.setdefault((L, m["cond"]), []).append(blind)
         log(f"[export] layer {L} done ({len(index)} units so far)")
