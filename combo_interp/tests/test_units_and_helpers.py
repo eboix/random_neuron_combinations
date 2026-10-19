@@ -90,3 +90,18 @@ def test_corpus_batches_cover_everything_once():
                 assert np.array_equal(ids[:n], st.get_tokens(int(s), 0, int(n)))
                 seen.append(int(s))
         assert sorted(seen) == list(range(st.n_seqs))
+
+
+def test_window_thresholds_match_bruteforce():
+    from combo_interp.calibrate import window_thresholds
+    rng = np.random.default_rng(1)
+    acts = rng.standard_normal((200, 12, 3))
+    thr = window_thresholds(acts, 1, [0.5, 0.95])
+    assert thr.shape == (2, 12, 3) and np.isnan(thr[:, 0]).all()            # length 1 = only the ignored first token
+    for n in (2, 5, 12):
+        for m in range(3):
+            brute = np.quantile(acts[:, 1:n, m].max(1), 0.95)
+            assert np.isclose(thr[1, n - 1, m], brute, atol=1e-5)
+    assert (np.diff(thr[1, 1:], axis=0) >= -1e-6).all()                       # longer texts -> higher bar
+    neg = window_thresholds(-acts, 1, [0.95])
+    assert np.isclose(neg[0, 5, 0], np.quantile((-acts[:, 1:6, 0]).max(1), 0.95), atol=1e-5)

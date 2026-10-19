@@ -176,3 +176,15 @@ def emulate_probe(cfg, paths, job_file, out_file, model: SynthModel, tok):
                     "max_act": float(vv.max()) if vv.size else None, "min_act": float(vv.min()) if vv.size else None,
                     "acts": [round(float(x), 4) for x in v], "tokens": [tok.decode([t]) for t in ids]})
     write_jsonl(out_file, out)
+
+
+def emulate_calibration(cfg, paths, model: SynthModel):
+    """numpy version of calibrate.run_calibration (same window sampling, same output files)."""
+    from combo_interp.calibrate import sample_windows, save_calibration
+    C = cfg.calibration
+    rng = np.random.default_rng(np.random.SeedSequence([int(cfg.seed), 31337]))
+    ids = sample_windows(CorpusStore(paths.corpus(C.split)), int(C.n_windows), int(C.window), rng)
+    for L in [int(l) for l in cfg.model.layers]:
+        us = load_unit_set(paths, L)
+        acts = np.stack([model.P(w, L) @ us["A"].astype(np.float64) + us["b"] for w in ids])
+        save_calibration(cfg, paths, L, acts)

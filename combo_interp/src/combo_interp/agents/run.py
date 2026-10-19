@@ -91,7 +91,8 @@ def _fake(stage, work, paths, blind, rng):
 def _claude(cfg, stage, work):
     A = cfg.agents
     cmd = [A.claude_cmd, "-p", prompts.RUN_PROMPT, "--model", A.model, "--max-turns", str(A.max_turns[stage]),
-           "--output-format", "json", "--allowedTools", *A.allowed_tools]
+           "--output-format", "json", "--permission-mode", "acceptEdits",   # without it Write is denied in -p mode
+           "--allowedTools", *A.allowed_tools]
     t0 = time.time()
     r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=int(A.timeout_s))
     info = {"returncode": r.returncode, "seconds": round(time.time() - t0, 1), "stderr": r.stderr[-500:]}

@@ -14,7 +14,8 @@ from combo_interp.pilot import pilot_metrics, summarize_pilot
 from combo_interp.scoring import build_probe_job, compute_scores
 
 from .helpers import smoke_cfg
-from .synth import (FakeTokenizer, SynthModel, emulate_cache, emulate_probe, emulate_stats_and_units, make_corpus)
+from .synth import (FakeTokenizer, SynthModel, emulate_cache, emulate_calibration, emulate_probe,
+                    emulate_stats_and_units, make_corpus)
 
 
 def build_world(tmp):
@@ -72,7 +73,20 @@ def test_full_downstream():
         assert neu.margin.mean() > 0.2
         eq = run_analysis(cfg, paths, log=quiet)
         assert set(eq.cond) == set(df.cond) - {"neuron"}
-        assert (paths.results / "dose_response.png").exists() and (paths.results / "summary.md").exists()
+        res = paths.results / "corpus_frac_0.3"
+        assert (res / "dose_response.png").exists() and (res / "summary.md").exists()
+
+        # ---- per-unit thresholds calibrated on random text: every unit crosses on ~5% of random texts
+        cfg_q, _ = smoke_cfg(tmp, ["scoring.threshold=random_quantile"])
+        emulate_calibration(cfg_q, paths, model)
+        dq = compute_scores(cfg_q, paths, [o1, o2], log=quiet)
+        assert (paths.scores / "random_q0.95" / "unit_scores.csv").exists() and (dq.threshold == "random_q0.95").all()
+        assert dq.rate_rand.mean() < 0.2, dq.groupby("cond").rate_rand.mean().to_dict()
+        assert (dq.blind_max_logratio.fillna(0) == df.blind_max_logratio.fillna(0)).all()   # threshold-free metric unchanged
+        run_analysis(cfg_q, paths, log=quiet)
+        assert (paths.results / "random_q0.95" / "summary.md").exists()
+        print("rate_rand by cond, corpus_frac vs random_q0.95:",
+              df.groupby("cond").rate_rand.mean().round(2).to_dict(), dq.groupby("cond").rate_rand.mean().round(2).to_dict())
 
         # ---- agent-free pilot: neurons fire on specific tokens, dense directions do not
         pdf = pilot_metrics(cfg, paths, log=quiet)

@@ -137,8 +137,9 @@ def plot_dose_response(df, outdir, cfg):
 
 
 def run_analysis(cfg, paths, log=print):
-    df = pd.read_csv(paths.scores / "unit_scores.csv")
-    out = paths.results
+    from .scoring import threshold_label
+    df = pd.read_csv(paths.scores / threshold_label(cfg) / "unit_scores.csv")
+    out = paths.results / threshold_label(cfg)
     out.mkdir(parents=True, exist_ok=True)
     eq = equivalence_table(df, cfg)
     eq.to_csv(out / "equivalence.csv", index=False)

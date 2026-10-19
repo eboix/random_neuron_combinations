@@ -120,8 +120,19 @@ probe:
   max_tokens: 256
   batch_tokens: 8192
 
+calibration:                # per-unit thresholds from random text (scripts/07b_calibrate.py), for scoring.threshold=random_quantile
+  split: holdout
+  n_windows: 500
+  window: 256               # >= probe.max_tokens, so every probe length has its own threshold
+  quantiles: [0.9, 0.95, 0.99]
+  batch_tokens: 8192
+
 scoring:
-  strong_frac: 0.30         # "fires strongly" = >= 30% of the unit's corpus maximum (same convention as the essay)
+  threshold: corpus_frac    # what "fires strongly" means for the rate_* metrics:
+                            #   corpus_frac      max >= strong_frac x the unit's corpus maximum
+                            #   random_quantile  max beats `random_quantile` of random texts of the same length (needs calibration)
+  strong_frac: 0.30         # corpus_frac: 30% of the unit's corpus maximum (same convention as the essay)
+  random_quantile: 0.95     # random_quantile: must be one of calibration.quantiles
   n_null: 5                 # other units' predicted-fire texts scored on this unit (chance baseline)
   n_rand: 5                 # random corpus-document prefixes scored on this unit
   rand_prefix_tokens: 60

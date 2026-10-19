@@ -40,6 +40,7 @@ neurons; the k-dose-response shows where interpretability breaks (if it does).
 | 6a | probe round 1 | `06_build_probe_job.py --round 1` → **GPU job** `07_probe.py` | | explanations → probe scores |
 | 5b | agents: blindmax, simulate | `05_run_agents.py --stage blindmax|simulate` | CPU + Claude | |
 | 6b | probe round 2 | `06_build_probe_job.py --round 2` → **GPU job** | | blind-max texts → probe scores |
+| 7b | calibrate thresholds | `07b_calibrate.py` | **GPU job**, minutes (CPU ok for small models) | random holdout windows → `data/calibration` (per-unit, per-length bar for `scoring.threshold=random_quantile`) |
 | 8 | score + analyze | `08_score_and_analyze.py --probe r1.jsonl r2.jsonl` | CPU | → `data/results/{equivalence.csv,summary.md,dose_response.png,...}` |
 
 GPU jobs: **5** (stats_units, cache_train, cache_holdout, probe r1, probe r2). Everything else is local.
@@ -91,6 +92,12 @@ Dress rehearsal of every stage on a laptop (real datasets, Qwen3-0.6B on CPU, fa
 Metrics per unit (primary pole; `r` = signed activation / the unit's corpus max): `rate_pred`, `rate_near`, `rate_distant`
 (fraction with `r >= 0.3`), `rate_null` (other units' texts: chance), `rate_rand` (random document prefixes), `margin = rate_pred - rate_near`,
 `blind_max_logratio`, `sim_spearman`, plus `n_parts` (compactness).
+
+**What "fires strongly" means** (`scoring.threshold`): `corpus_frac` = the text's max reaches `strong_frac` (30%) of the
+unit's corpus max. Not comparable across conditions: Gaussian-like dense combos cross 30% of their max on most random
+texts, sparse neurons rarely do. `random_quantile` = the text's max beats `random_quantile` (95%) of random holdout texts
+of the same length for that unit (run `07b_calibrate.py` first), so every unit crosses on ~5% of random text. Scores and
+results go to `data/scores/<threshold>/` and `data/results/<threshold>/`; rescoring is free (`--set scoring.threshold=...`).
 
 **Statistics** (`analyze.py`): per condition vs `neuron`, layer-stratified bootstrap CI of the difference in each metric; TOST-style
 verdict (`equivalent` / `combo_worse` / `combo_better` / `inconclusive`) against margins **fixed in the config before you see

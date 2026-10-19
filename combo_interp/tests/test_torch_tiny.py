@@ -139,6 +139,22 @@ def test_downstream_on_real_cache_and_probe():
         assert len(df) > 0 and df.margin.notna().any()
         run_analysis(cfg, paths, log=q)
 
+        # calibration via torch == direct computation on the same windows
+        from combo_interp.calibrate import load_calibration, run_calibration, sample_windows, window_thresholds
+        run_calibration(cfg, paths, model=model, tok=tok, log=q)
+        C = cfg.calibration
+        rng = np.random.default_rng(np.random.SeedSequence([int(cfg.seed), 31337]))
+        ids = sample_windows(CorpusStore(paths.corpus(C.split)), int(C.n_windows), int(C.window), rng)
+        with MLPCapture(model, [L]) as cap:
+            cap.run(torch.tensor(ids))
+            z = (cap.p[L].float() @ torch.tensor(us["A"]) + torch.tensor(us["b"])).numpy()
+        cal = load_calibration(paths, L)
+        skip = int(cfg.cache.skip_first_tokens)
+        assert np.allclose(cal["thr_pos"], window_thresholds(z, skip, C.quantiles), rtol=1e-3, atol=1e-3, equal_nan=True)
+        cfg_q, _ = smoke_cfg(tmp, ["scoring.threshold=random_quantile"])
+        dq = compute_scores(cfg_q, paths, [o1, o2], log=q)
+        assert dq.rate_rand.notna().any() and dq.rate_rand.mean() < 0.3
+
 
 def test_interventions():
     need("torch")

@@ -1,0 +1,20 @@
+# Small agent study on a laptop: Qwen3-0.6B on CPU, real Claude agents.
+# 9 conditions x 3 layers x 8 units = 216 explained units (vs 1080 in the full study).
+# Data stages (00-04) are free; agent stages bill the Claude account (`total_cost_usd` in agent_results/*/_run_log.jsonl).
+base: default.yaml
+experiment: qwen3_0.6b_small_v1
+paths:
+  data_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/data
+  private_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/private
+  jobs_dir: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/jobs
+  agent_work_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/agent_work
+model: {name: Qwen/Qwen3-0.6B, dtype: float32, layers: [7, 14, 21]}   # 28 layers, d_ff 3072
+corpus: {seq_len: 1024, splits: {train: {tokens: 3000000}, holdout: {tokens: 300000}}}
+stats: {n_tokens: 1000000, max_batch_tokens: 8192}
+units: {per_condition: 50}
+cache:
+  max_batch_tokens: 8192
+  ckpt_every: 50
+  train_tokens: 3000000
+  holdout: {tokens: 300000, k_big: 256, k_prof: 0, uniform_samples: 50000}
+agents: {units_per_condition_per_layer: 8, backend: claude, concurrency: 4}

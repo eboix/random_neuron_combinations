@@ -73,17 +73,55 @@ def _spearman(x, y):
     return float(spearmanr(x, y).statistic)
 
 
+def threshold_label(cfg) -> str:
+    """Subfolder name for scores/results, so several threshold definitions can be compared side by side."""
+    S = cfg.scoring
+    mode = S.get("threshold", "corpus_frac")
+    if mode == "corpus_frac":
+        return f"corpus_frac_{float(S.strong_frac):g}"
+    if mode == "random_quantile":
+        return f"random_q{float(S.random_quantile):g}"
+    raise ValueError(f"unknown scoring.threshold {mode!r}")
+
+
+def _hit_fn(cfg, paths, ref):
+    """-> hit(blind_id, signed_act, n_tokens) -> bool | nan: does a probe text count as 'fires strongly'?"""
+    S = cfg.scoring
+    if S.get("threshold", "corpus_frac") == "corpus_frac":
+        strong = float(S.strong_frac)
+        return lambda b, a, n: a / ref[b]["ref"] >= strong
+    from .calibrate import load_calibration
+    from .units import load_unit_set
+    cal = {int(L): load_calibration(paths, int(L)) for L in cfg.model.layers}
+    col = {m["unit_id"]: m["col"] for L in cfg.model.layers for m in load_unit_set(paths, int(L))["meta"]}
+    q = float(S.random_quantile)
+    qi = {L: int(np.argmin(np.abs(c["quantiles"] - q))) for L, c in cal.items()}
+    for L, c in cal.items():
+        if abs(c["quantiles"][qi[L]] - q) > 1e-9:
+            raise ValueError(f"scoring.random_quantile={q} not calibrated (have {list(c['quantiles'])}); rerun 07b_calibrate.py")
+
+    def hit(b, a, n):
+        R = ref[b]
+        L = int(R["layer"])
+        thr = cal[L]["thr_pos" if R["primary"] > 0 else "thr_neg"]
+        t = thr[qi[L], min(int(n), thr.shape[1]) - 1, col[R["unit_id"]]]
+        return a >= t if np.isfinite(t) else np.nan
+    return hit
+
+
 def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
     ref = read_json(paths.unit_ref)
     truth = read_json(paths.holdout_truth)
-    strong = float(cfg.scoring.strong_frac)
+    hit = _hit_fn(cfg, paths, ref)
     by_unit = defaultdict(lambda: defaultdict(list))
+    hits = defaultdict(lambda: defaultdict(list))
     for f in probe_files:
         for r in read_jsonl(f):
             b, kind, _ = r["probe_id"].split("|")
             R = ref[b]
             a = r["max_act"] if R["primary"] > 0 else (None if r["min_act"] is None else -r["min_act"])
             by_unit[b][kind].append(np.nan if a is None else a / R["ref"])
+            hits[b][kind].append(np.nan if a is None else float(hit(b, a, r["n_tokens"])))
     rows = []
     for p in sorted(paths.agent_results("explain").glob("u*.json")):
         b = p.stem
@@ -95,7 +133,9 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
         for kind in ("pred", "near", "distant", "null", "rand"):
             v = np.array(by_unit[b].get(kind, []), float)
             v = v[~np.isnan(v)]
-            row[f"rate_{kind}"] = float((v >= strong).mean()) if len(v) else np.nan
+            h = np.array(hits[b].get(kind, []), float)
+            h = h[~np.isnan(h)]
+            row[f"rate_{kind}"] = float(h.mean()) if len(h) else np.nan
             row[f"meanr_{kind}"] = float(v.mean()) if len(v) else np.nan
         row["margin"] = row["rate_pred"] - row["rate_near"]
         bm = np.array(by_unit[b].get("blindmax", []), float)
@@ -110,7 +150,8 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
             row["sim_spearman"] = np.nan
         rows.append(row)
     df = pd.DataFrame(rows)
-    out = paths.scores
+    df["threshold"] = threshold_label(cfg)
+    out = paths.scores / threshold_label(cfg)
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / "unit_scores.csv", index=False)
     log(f"[scores] {len(df)} units -> {out / 'unit_scores.csv'}")

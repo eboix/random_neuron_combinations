@@ -27,6 +27,10 @@ STAGES = {
         cmd="python scripts/02_cache.py --config {config} --split holdout",
         need=["data/corpus/holdout", "data/units"], out=["data/cache/holdout"],
         desc="Pass 2 on the held-out corpus (for the simulation score). ~10% of the train cost."),
+    "calibrate": dict(
+        cmd="python scripts/07b_calibrate.py --config {config}",
+        need=["data/corpus/holdout", "data/units"], out=["data/calibration"],
+        desc="Per-unit firing thresholds from random holdout windows (scoring.threshold=random_quantile). Minutes."),
     "probe": dict(
         cmd="python scripts/07_probe.py --config {config} --job-file {jobdir}/probe_in.jsonl --out {jobdir}/probe_out.jsonl",
         need=["data/units"], out=[],
