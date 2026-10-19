@@ -131,8 +131,8 @@ def build_unit_data(col, blind, layer, s, ref, ref_other, big, prof, uacts, ugid
             long = None
             if j < n_long:
                 long = _render_window(store, dec, seq, pos, int(E["long_before"]), int(E["long_after"]), None, thresh,
-                                      center_frac=sp[p] * v / R)
-            out.append({"i": j, "frac": round(sp[p] * v / R, 3), "text": text, "long": long})
+                                      center_frac=v / R)                     # v is already signed along the pole
+            out.append({"i": j, "frac": round(v / R, 3), "text": text, "long": long})
         return out
 
     data = {"blind_id": blind, "layer": int(layer), "primary_pole": pole}
@@ -281,7 +281,7 @@ def build_agent_cache(cfg, paths, tok, log=print):
             items = []
             for _, v, g in hits:
                 seq, pos = divmod(g, ho_store.seq_len)
-                items.append((_render_window(ho_store, dec, seq, pos, int(E["holdout_before"]), int(E["holdout_after"]), None, 0.1), s * v / ref))
+                items.append((_render_window(ho_store, dec, seq, pos, int(E["holdout_before"]), int(E["holdout_after"]), None, 0.1), v / ref))   # v already signed
             if len(hgid):
                 rr = rng.choice(len(hgid), size=min(int(E["holdout_random_items"]), len(hgid)), replace=False)
                 for r in rr:

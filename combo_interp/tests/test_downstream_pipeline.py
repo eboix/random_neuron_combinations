@@ -45,7 +45,11 @@ def test_full_downstream():
         assert "frac_tokens_ge_10pct_of_max" in ref[sel[0]]                          # kept privately instead
         d = read_json(paths.agent_cache / f"{sel[0]}.json")
         assert d["examples"]["primary"] and "[[" in d["examples"]["primary"][0]["text"]
-        assert all(0 <= e["frac"] <= 1.0001 for e in d["examples"]["primary"])      # fractions of the corpus max
+        assert {ref[b]["primary"] for b in sel} == {1, -1}, "need both poles to test sign handling"
+        for b in sel:                                                               # both poles: fractions in [0, 1]
+            v = read_json(paths.agent_cache / f"{b}.json")
+            assert all(0 <= e["frac"] <= 1.0001 for e in v["examples"]["primary"]), (b, ref[b]["primary"])
+            assert max(truth[b]) > 0.3, (b, ref[b]["primary"], truth[b])          # strong holdout items stay positive
         assert len(truth[sel[0]]) == len(read_json(paths.agent_cache / "holdout" / f"{sel[0]}.json"))
 
         # ---- agents (fake backend) + probe rounds (numpy emulation of the GPU job)
