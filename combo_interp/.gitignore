@@ -3,5 +3,6 @@ private/
 __pycache__/
 *.egg-info/
 .pytest_cache/
+slurm/env.local.sh
 jobs/done/*
 !jobs/done/.gitkeep

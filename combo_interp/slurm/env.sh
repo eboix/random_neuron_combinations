@@ -1,29 +1,38 @@
 #!/bin/bash
-# Cluster settings for combo_interp jobs. EDIT THE BLOCK BELOW once; everything else reads from here.
-# Defaults are for Penn PARCC's Betty cluster (https://parcc.upenn.edu/training/slurm/). Partitions there:
-#   CPU: genoa-std-mem (genoa-lrg-mem above 256 GB)    GPU: b200-mig45 (45 GB MIG slice), b200-mig90, dgx-b200 (full B200)
+# Cluster settings for combo_interp jobs. Defaults are for Penn PARCC's Betty cluster
+# (https://parcc.upenn.edu/training/slurm/). Put YOUR values in slurm/env.local.sh (gitignored, so `git pull` never
+# conflicts), e.g.
+#   export CI_STORE=/vast/projects/<PI>/.../$USER
+#   export CI_CODE=$CI_STORE/RandomNeuronCombinations/combo_interp
+#   export CI_VENV=$CI_STORE/.venv
+#   export HF_HOME=$CI_STORE/huggingface-cache
+# Any variable below can be overridden there.
+#
+# Betty's Slurm CLI filter enforces fixed ratios per partition: memory is derived from CPUs (never pass --mem), and
+# GPU jobs get a fixed number of CPUs per GPU:
+#   dgx-b200 (full B200, 180 GB): 28 CPUs/GPU    b200-mig90 (90 GB): 14    b200-mig45 (45 GB): 6
+#   genoa-std-mem: 5632 MB/CPU, any CPU count
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$_here/env.local.sh" ] && source "$_here/env.local.sh"
 
-# ---------------------------------------------------------------- edit me
-export CI_ACCOUNT=                         # Slurm account from ColdFront; empty = your default account.
-                                           #   list yours: sacctmgr show assoc user=$USER format=account%30
-export CI_CPU_PARTITION=genoa-std-mem
-export CI_GPU_PARTITION=b200-mig45         # 45 GB is plenty for Qwen3-8B in bf16
-export CI_GPUS=1                           # passed as --gpus
-export CI_GPU_MEM=64G                      # host RAM for GPU jobs; MIG partitions may cap memory per GPU
-export CI_CONFIG=configs/cluster_qwen3_8b.yaml
-export CI_CODE=$HOME/projects/RandomNeuronCombinations/combo_interp          # this folder, cloned on the cluster
+export CI_ACCOUNT=${CI_ACCOUNT:-}                       # empty = your default account (sacctmgr show assoc user=$USER)
+export CI_CPU_PARTITION=${CI_CPU_PARTITION:-genoa-std-mem}
+export CI_CPU_CPUS=${CI_CPU_CPUS:-8}                    # -> 8 x 5632 MB = 44 GB
+export CI_GPU_PARTITION=${CI_GPU_PARTITION:-dgx-b200}
+export CI_GPUS=${CI_GPUS:-1}
+export CI_GPU_CPUS=${CI_GPU_CPUS:-28}                   # CPUs per GPU required by the partition (table above)
+export CI_CONFIG=${CI_CONFIG:-configs/cluster_qwen3_8b.yaml}
+export CI_CODE=${CI_CODE:-$HOME/projects/RandomNeuronCombinations/combo_interp}   # this folder, cloned on the cluster
 # Run data (~8 GB) and the model cache (Qwen3-8B, ~16 GB) must be on shared storage (jobs land on different nodes).
-# Home (/vast/home/...) is shared but capped at 50 GB; the PI's VAST project space is the roomier choice:
-#   export CI_STORE=/vast/projects/<PI-PennKey>/default/$USER
+# Home (/vast/home/...) is shared but capped at 50 GB; the PI's VAST project space is the roomier choice.
 export CI_STORE=${CI_STORE:-$HOME}
-export CI_RUN=$CI_STORE/combo_runs/qwen3_8b_v1
+export CI_RUN=${CI_RUN:-$CI_STORE/combo_runs/qwen3_8b_v1}
 export HF_HOME=${HF_HOME:-$CI_STORE/hf_cache}
 # Betty supports CUDA 12.8 only; python from the anaconda3 module, torch from the cu128 index:
-#   module load anaconda3 && conda create -y -p ~/envs/py311 python=3.11
-#   ~/envs/py311/bin/python -m venv $CI_VENV && $CI_VENV/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   module load anaconda3 && python -m venv $CI_VENV
+#   $CI_VENV/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
 #   $CI_VENV/bin/pip install -e "$CI_CODE[gpu,dev]"
-export CI_VENV=$HOME/venvs/combo
-# ---------------------------------------------------------------- end
+export CI_VENV=${CI_VENV:-$HOME/venvs/combo}
 
 export COMBO_DATA_ROOT=$CI_RUN/data
 export COMBO_PRIVATE_ROOT=$CI_RUN/private

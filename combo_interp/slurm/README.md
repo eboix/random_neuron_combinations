@@ -9,15 +9,16 @@ Defaults in `slurm/env.sh` target Penn PARCC's Betty (`ssh <PennKey>@slurm_login
 ```bash
 srun --ntasks=1 --cpus-per-task=1 --mem=1G hostname        # fails -> PI must add you to a ColdFront project
 git clone -b rohan https://github.com/eboix/random_neuron_combinations.git ~/projects/RandomNeuronCombinations
-cd ~/projects/RandomNeuronCombinations/combo_interp && $EDITOR slurm/env.sh   # account, partitions, CI_STORE
+cd ~/projects/RandomNeuronCombinations/combo_interp && $EDITOR slurm/env.local.sh   # your paths/account (see env.sh)
 module load anaconda3 && conda create -y -p ~/envs/py311 python=3.11          # Betty: CUDA 12.8 only
 ~/envs/py311/bin/python -m venv ~/venvs/combo
 ~/venvs/combo/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
 ~/venvs/combo/bin/pip install -e ".[gpu,dev]"
 bash slurm/submit.sh test                                  # CPU job: full test suite incl. the torch checks
 ```
-CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` with `--gpus=$CI_GPUS`. If a GPU job is rejected
-for memory, lower `CI_GPU_MEM`; check partition limits with `scontrol show partition b200-mig45`.
+CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` (default `dgx-b200`) with `--gpus=$CI_GPUS`.
+Betty's CLI filter derives memory from CPUs and fixes CPUs per GPU per partition, so the scripts never pass `--mem`;
+if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
 
 ## Phases
 | # | where | command | what |

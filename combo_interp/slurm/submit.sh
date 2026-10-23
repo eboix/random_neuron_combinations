@@ -14,8 +14,9 @@ source slurm/env.sh
 sub() {  # sub <stage> <cpu|gpu> <time> [dependency job ids...]
   local stage=$1 kind=$2 time=$3; shift 3
   local dep=""; [ $# -gt 0 ] && dep="--dependency=afterok:$(IFS=:; echo "$*")"
-  local res="--partition=$CI_CPU_PARTITION --cpus-per-task=8 --mem=32G"
-  [ "$kind" = gpu ] && res="--partition=$CI_GPU_PARTITION --gpus=$CI_GPUS --cpus-per-task=8 --mem=$CI_GPU_MEM"
+  # no --mem: Betty's CLI filter derives memory from CPUs and rejects any other ratio
+  local res="--partition=$CI_CPU_PARTITION --cpus-per-task=$CI_CPU_CPUS"
+  [ "$kind" = gpu ] && res="--partition=$CI_GPU_PARTITION --gpus=$CI_GPUS --cpus-per-task=$((CI_GPU_CPUS * CI_GPUS))"
   local acct=""; [ -n "$CI_ACCOUNT" ] && acct="--account=$CI_ACCOUNT"
   sbatch --parsable --job-name="ci_$stage" $acct --time="$time" \
          $res $dep --output="$CI_LOGS/%x_%j.out" slurm/job.sbatch "$stage"
