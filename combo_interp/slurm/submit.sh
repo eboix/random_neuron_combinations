@@ -14,9 +14,10 @@ source slurm/env.sh
 sub() {  # sub <stage> <cpu|gpu> <time> [dependency job ids...]
   local stage=$1 kind=$2 time=$3; shift 3
   local dep=""; [ $# -gt 0 ] && dep="--dependency=afterok:$(IFS=:; echo "$*")"
-  local res="--cpus-per-task=8 --mem=32G"
-  [ "$kind" = gpu ] && res="--gres=$CI_GPU_GRES --cpus-per-task=8 --mem=100G"
-  sbatch --parsable --job-name="ci_$stage" --account="$CI_ACCOUNT" --partition="$CI_PARTITION" --time="$time" \
+  local res="--partition=$CI_CPU_PARTITION --cpus-per-task=8 --mem=32G"
+  [ "$kind" = gpu ] && res="--partition=$CI_GPU_PARTITION --gpus=$CI_GPUS --cpus-per-task=8 --mem=$CI_GPU_MEM"
+  local acct=""; [ -n "$CI_ACCOUNT" ] && acct="--account=$CI_ACCOUNT"
+  sbatch --parsable --job-name="ci_$stage" $acct --time="$time" \
          $res $dep --output="$CI_LOGS/%x_%j.out" slurm/job.sbatch "$stage"
 }
 

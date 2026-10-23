@@ -1,16 +1,28 @@
 #!/bin/bash
 # Cluster settings for combo_interp jobs. EDIT THE BLOCK BELOW once; everything else reads from here.
-# Defaults mirror the team's working scripts (../../slurm/lm_sites.sbatch): account/partition whartonstat, L40S GPUs.
+# Defaults are for Penn PARCC's Betty cluster (https://parcc.upenn.edu/training/slurm/). Partitions there:
+#   CPU: genoa-std-mem (genoa-lrg-mem above 256 GB)    GPU: b200-mig45 (45 GB MIG slice), b200-mig90, dgx-b200 (full B200)
 
 # ---------------------------------------------------------------- edit me
-export CI_ACCOUNT=whartonstat
-export CI_PARTITION=whartonstat            # or standby (preemptible, more GPUs)
-export CI_GPU_GRES=gpu:l40s:1              # 48 GB is plenty for Qwen3-8B in bf16; gpu:a100:1 also works
+export CI_ACCOUNT=                         # Slurm account from ColdFront; empty = your default account.
+                                           #   list yours: sacctmgr show assoc user=$USER format=account%30
+export CI_CPU_PARTITION=genoa-std-mem
+export CI_GPU_PARTITION=b200-mig45         # 45 GB is plenty for Qwen3-8B in bf16
+export CI_GPUS=1                           # passed as --gpus
+export CI_GPU_MEM=64G                      # host RAM for GPU jobs; MIG partitions may cap memory per GPU
 export CI_CONFIG=configs/cluster_qwen3_8b.yaml
 export CI_CODE=$HOME/projects/RandomNeuronCombinations/combo_interp          # this folder, cloned on the cluster
-export CI_RUN=$HOME/combo_runs/qwen3_8b_v1                                    # SHARED storage (jobs land on different nodes); ~8 GB
-export HF_HOME=${HF_HOME:-$HOME/hf_cache}                                     # Qwen3-8B is ~16 GB; must be shared too
-export CI_VENV=$HOME/venvs/combo                                              # python -m venv $CI_VENV && $CI_VENV/bin/pip install -e "$CI_CODE[gpu,dev]"
+# Run data (~8 GB) and the model cache (Qwen3-8B, ~16 GB) must be on shared storage (jobs land on different nodes).
+# Home (/vast/home/...) is shared but capped at 50 GB; the PI's VAST project space is the roomier choice:
+#   export CI_STORE=/vast/projects/<PI-PennKey>/default/$USER
+export CI_STORE=${CI_STORE:-$HOME}
+export CI_RUN=$CI_STORE/combo_runs/qwen3_8b_v1
+export HF_HOME=${HF_HOME:-$CI_STORE/hf_cache}
+# Betty supports CUDA 12.8 only; python from the anaconda3 module, torch from the cu128 index:
+#   module load anaconda3 && conda create -y -p ~/envs/py311 python=3.11
+#   ~/envs/py311/bin/python -m venv $CI_VENV && $CI_VENV/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   $CI_VENV/bin/pip install -e "$CI_CODE[gpu,dev]"
+export CI_VENV=$HOME/venvs/combo
 # ---------------------------------------------------------------- end
 
 export COMBO_DATA_ROOT=$CI_RUN/data

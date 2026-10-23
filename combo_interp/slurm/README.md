@@ -5,12 +5,19 @@ signed in. Only the blinded agent views go to the laptop, so the blinding key an
 next to an agent workspace.
 
 ## One-time setup (cluster login node)
+Defaults in `slurm/env.sh` target Penn PARCC's Betty (`ssh <PennKey>@slurm_login.parcc.upenn.edu`).
 ```bash
-git clone <repo> ~/projects/RandomNeuronCombinations && cd ~/projects/RandomNeuronCombinations && git checkout rohan
-cd combo_interp && $EDITOR slurm/env.sh                    # account, partition, GPU type, paths
-python3 -m venv ~/venvs/combo && ~/venvs/combo/bin/pip install -e ".[gpu,dev]"   # python >= 3.10, not an alpha
+srun --ntasks=1 --cpus-per-task=1 --mem=1G hostname        # fails -> PI must add you to a ColdFront project
+git clone -b rohan https://github.com/eboix/random_neuron_combinations.git ~/projects/RandomNeuronCombinations
+cd ~/projects/RandomNeuronCombinations/combo_interp && $EDITOR slurm/env.sh   # account, partitions, CI_STORE
+module load anaconda3 && conda create -y -p ~/envs/py311 python=3.11          # Betty: CUDA 12.8 only
+~/envs/py311/bin/python -m venv ~/venvs/combo
+~/venvs/combo/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
+~/venvs/combo/bin/pip install -e ".[gpu,dev]"
 bash slurm/submit.sh test                                  # CPU job: full test suite incl. the torch checks
 ```
+CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` with `--gpus=$CI_GPUS`. If a GPU job is rejected
+for memory, lower `CI_GPU_MEM`; check partition limits with `scontrol show partition b200-mig45`.
 
 ## Phases
 | # | where | command | what |
@@ -24,7 +31,7 @@ If `cache_train` hits its time limit it leaves a checkpoint; `bash slurm/submit.
 
 ## Laptop side
 ```bash
-CL=you@cluster.host; R=combo_runs/qwen3_8b_v1/data; L=~/combo_runs/qwen3_8b_v1/data; cd combo_interp
+CL=<PennKey>@slurm_login.parcc.upenn.edu; R=combo_runs/qwen3_8b_v1/data; L=~/combo_runs/qwen3_8b_v1/data; cd combo_interp
 rsync -av $CL:$R/agent_cache $L/                                    # views only; private/ stays on the cluster
 COMBO_DATA_ROOT=$L python scripts/05_run_agents.py --config configs/cluster_qwen3_8b.yaml --stage explain --limit 5   # check cost first
 COMBO_DATA_ROOT=$L python scripts/05_run_agents.py --config configs/cluster_qwen3_8b.yaml --stage explain
