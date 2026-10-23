@@ -1,4 +1,6 @@
 \documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage[margin=1in]{geometry}
 \usepackage{booktabs}
 \usepackage{amsmath}
@@ -48,17 +50,58 @@ tokens (FineWeb, FineWeb-Edu, code, Wikipedia in 7 languages; documents up to 10
 out). One streaming pass computes activation statistics (1M tokens) to build the units; a second pass caches, per
 unit, the top-1024 firings in each direction, the top-64 with activation windows, and a uniform token sample.
 
-\paragraph{Agents.} Claude Sonnet 5.5 via the Claude Code CLI, each unit in an isolated folder, identified only by an
-opaque id; activations are shown as fractions of the unit's corpus maximum, never in raw units. Three roles:
+\paragraph{Agents.} Every agent is a separate headless Claude Code session (\texttt{claude -p}, Claude Sonnet 5.5)
+started in a folder that contains only the files for one unit, with no instruction files (\texttt{CLAUDE.md}) above it;
+the blinding key and ground truth are stored elsewhere. A unit is identified only by an opaque id (e.g.\
+\texttt{u00102}) and its layer; agents are never told the condition, $k$, which neurons or weights make up the unit,
+its raw activation scale, or its sparsity statistics. All conditions receive identical instructions.
+
+\paragraph{What the explainer sees.} A one-page view (\texttt{view.md}, the same content as \texttt{data.json}) of
+the unit's \emph{primary pole}, the direction with the more extreme corpus firings. Every activation is given as a
+fraction of the unit's maximum on that pole (1.00 = strongest firing in the corpus):
 \begin{itemize}
-\item \textbf{Explainer} (sees examples): writes an explanation, a list of independent triggers (\emph{parts}), a
-confidence (1--5), and 5 predicted-firing, 5 near-miss and 5 unrelated texts, without feedback.
-\item \textbf{Blind-max writer} (sees only the explanation): writes 3 texts meant to maximise the unit.
-\item \textbf{Simulator} (sees only the explanation): rates 20 held-out contexts 0--10 for activation on a marked
-token; 10 are among the unit's strongest held-out firings, 10 are uniformly random tokens, shuffled together.
+\item the 24 strongest firings, at most one per document, each as a window of 48 tokens before and 16 after the
+firing token; the firing token is marked \texttt{[[tok|f]]} and every other token in the window that reaches 10\% of
+the maximum is tagged \texttt{«tok|f»};
+\item the 12 tokens it fires on most often and the 8 most frequent next tokens, over its 100 strongest firings;
+\item up to 6 further examples in each of three strength bands (at least 50\%, 30\% and 10\% of the maximum), with
+32 tokens before and 8 after;
+\item 8 uniformly random tokens with their activation, as a baseline for ordinary text;
+\item the 8 strongest firings of the opposite pole, with their token statistics.
 \end{itemize}
-8 units per condition and layer were explained (216 units; 24 per condition). Agent cost: \$39.26
-(\$0.18 per unit over the three roles), with no failed sessions.
+
+\paragraph{What the explainer can do.} Agents may only read files and write files inside their own folder: the
+university's Enterprise Claude account refuses every shell command and every external (MCP) tool call in headless
+mode, regardless of allow-lists, so no tool that requires running code is available.
+\begin{itemize}
+\item \emph{In the pilot}, the folder also contained a helper script for browsing the data, which agents could not
+run; sessions took at most 5 turns, so explanations rest on the one-page view. The explainer also wrote the test texts
+(5 predicted-firing, 5 near-miss, 5 unrelated) used for the rate metrics. For units whose primary pole is negative,
+the strength labels of the top examples were shown with the wrong sign (Section~\ref{sec:problems}).
+\item \emph{Current design.} The helper script is replaced by \texttt{long\_contexts.md}: 384 tokens of context before
+and 32 after each of the 12 strongest firings. Optionally, the explainer can query the model: it writes up to 10 texts
+to \texttt{queries/001.txt}, and a relay outside its control runs them through the model and returns
+\texttt{queries/001.out.md}, showing the unit's activation on every token in the same format as the view (texts are
+cut at 256 tokens, which the answer says; the first token is never scored). The budget is 20 texts per unit, the same
+for every condition, and the relay only ever queries the unit of the folder it reads from. The explainer no longer
+writes test texts.
+\end{itemize}
+The explainer's output is an explanation ($\le$60 words) of what the primary pole responds to, where in the pattern it
+fires ($\le$20 words), a list of independent triggers (\emph{parts}, 1--8), an optional remark on the other pole, and a
+confidence (1--5). Limits: 40 turns and 25 minutes per session.
+
+\paragraph{Explanation-only agents.} Both see the explanation and the ``fires on'' note and nothing else.
+\begin{itemize}
+\item \textbf{Writer} (in the pilot: \emph{blind-max writer}): 3 texts meant to make the unit fire as strongly as
+possible. In the current design it also writes the 5 predicted-firing, 5 near-miss and 5 unrelated test texts, so all
+test texts measure what the explanation conveys rather than what the explainer saw.
+\item \textbf{Simulator}: rates 20 held-out contexts 0--10 for activation on a marked token. Ten are spread over the
+unit's 60 strongest held-out firings (group \emph{top}) and ten are uniformly random tokens (group \emph{random}),
+shuffled together.
+\end{itemize}
+
+\paragraph{Pilot size and cost.} 8 units per condition and layer were explained (216 units; 24 per condition). Agent
+cost: \$39.26 (\$0.18 per unit over the three roles), with no failed sessions.
 
 \paragraph{Metrics.} \emph{Simulator correlation}: Spearman correlation between simulator ratings and true
 activations. \emph{Rate} metrics: share of a unit's probe texts that ``fire strongly''; \emph{margin} =
@@ -140,12 +183,12 @@ strong from random items (AUC 0.84 for neurons, 0.90 for \texttt{related\_5}, 0.
 25\% for \texttt{dense\_white}. Within the 10 strong items, neurons are the most predictable (0.45 versus 0.23--0.33),
 i.e.\ their explanations also capture firing intensity.
 
-\paragraph{The text-based metrics do not discriminate.} Agents' predicted-firing texts succeed at similar rates in every
+\paragraph{The text-based metrics do not discriminate.} The explainers' own predicted-firing texts succeed at similar rates in every
 condition (88--97\% under the per-unit threshold, 71--93\% under the 30\% rule), and the median blind-max ratio is 0.71--0.90 in every condition (four
 mixtures are formally equivalent to neurons). Explanations quote the strongest examples, so writers can reproduce
 them without the explanation capturing a concept.
 
-\section{Problems found and fixed}
+\section{Problems found and fixed}\label{sec:problems}
 \begin{itemize}
 \item \textbf{Threshold bias}: the 30\%-of-maximum rule counts 58\% of random texts as firing for \texttt{dense\_raw}
 (2\% for neurons). Fixed by the per-unit calibrated threshold (4--9\% for every condition on independent random text).
@@ -153,21 +196,33 @@ them without the explanation capturing a concept.
 negated, hiding the effect (correlations $+0.52$ and $-0.53$ by direction averaged to zero). Fixed and rescored
 without new agent runs. The same error showed negative strength labels in those units' example lists; scores of the
 affected units do not differ from the others.
-\item \textbf{Agent write permission}: the CLI refused agents' writes in headless mode until edits were explicitly
-allowed inside their own folder.
+\item \textbf{Agent permissions}: the CLI refused agents' writes in headless mode until edits were explicitly allowed
+inside their own folder. Shell commands and external tool calls stay refused on this account even when allowed by
+name, so the pilot's helper script was unusable; it was replaced by pre-rendered files, and model queries go through
+files answered by a relay.
 \end{itemize}
 
 \section{Limitations}
 Small samples (24 units per condition, 20 simulator items per unit); a 0.6B model, whose neurons the essay expects to be
 less clean than in larger models; analysis choices were made after seeing this run, so it is a calibration study, not a
-pre-registered test; explainer, writer and simulator are the same model; agents could in principle read files outside
-their folder (no evidence they did: sessions took at most 5 turns).
+pre-registered test; explainer, writer and simulator are the same model; explanations quote top examples, which the
+writer can copy. Agents cannot run code, but whether reading files outside their folder is refused was not tested;
+the blinding key is therefore kept on a different machine from the agents in the cluster setup.
 
-\section{Next step: Qwen3-8B on the cluster}
-Layers 9, 18, 27 of 36 ($d_{\mathrm{ff}}=12288$), the full 50M-token corpus with 2048-token documents, 200 units per
-condition and layer cached, and 24 per condition and layer explained (648 units). Before running agents, fix the primary
-metric (simulator correlation), the threshold (per-unit 95th percentile) and the equivalence margins, and remove quoted
-examples from the text given to the blind-max writer. Estimated cost: roughly 3--8 GPU-hours on one L40S or A100, and
-about \$120--160 of agent usage at the measured \$0.18--0.25 per unit.
+\section{Changes since the pilot, and next step}
+The pipeline now has the design described above: the explainer only explains (optionally with 20 model queries), an
+explanation-only writer produces all test texts, all texts are scored in one model pass, and simulator results are
+also reported per item group (correlation within top items, within random items, top-versus-random AUC, and mean
+rating on random items, i.e.\ false alarms). A trial on 4 pilot units (two neurons, a whitened dense direction and a
+\texttt{ksparse\_100} mixture) ran end to end with real agents: 3 of 4 explainers queried the model (5--6 texts each,
+in one round), used the answers to confirm or narrow their hypotheses, and the writer's test texts separated neurons
+from mixtures where the explainer's had not. Single units vary strongly between runs, so 4 units cannot show whether
+querying improves explanations.
+
+Next: Qwen3-8B on the cluster, layers 9, 18, 27 of 36 ($d_{\mathrm{ff}}=12288$), the full 50M-token corpus with
+2048-token documents, 200 units per condition and layer cached, and 24 per condition and layer explained (648 units).
+Before running agents, fix the primary metric (simulator correlation), the threshold (per-unit 95th percentile), the
+equivalence margins and whether queries are enabled. Estimated cost: roughly 3--8 GPU-hours on one L40S or A100, and
+about \$130--170 of agent usage at the measured \$0.20--0.25 per unit.
 
 \end{document}

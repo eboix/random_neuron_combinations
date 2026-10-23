@@ -121,7 +121,7 @@ agents:
                             # 05_run_agents.py answers with queries/NNN.out.md (05b_query_server.py must be up)
     enabled: false
     url: http://127.0.0.1:8765
-    budget_texts: 20        # per unit, identical for every condition; texts the explainer queried are not scored
+    budget_texts: 20        # per unit, identical for every condition (counted in the scores as n_queries)
     max_texts_per_call: 10
     max_tokens_per_text: 256
 
