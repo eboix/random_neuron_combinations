@@ -2,8 +2,8 @@
 # Submit a phase of the study from the cluster login node (run from the combo_interp folder):
 #   bash slurm/submit.sh test     CPU: test suite (do this first on a new cluster setup)
 #   bash slurm/submit.sh data     corpus -> stats_units -> {cache_train, cache_holdout, calibrate} -> export+pilot
-#   bash slurm/submit.sh probe1   after the explain agents' results are synced up
-#   bash slurm/submit.sh probe2   after the blindmax / simulate results are synced up
+#   bash slurm/submit.sh serve    model query service for the explainer agents (only if agents.query.enabled)
+#   bash slurm/submit.sh probe    after the write / simulate results are synced up
 #   bash slurm/submit.sh score    scores + equivalence analysis (primary threshold + corpus_frac sensitivity)
 #   bash slurm/submit.sh <stage>  any single stage of slurm/stage.sh (e.g. cache_train to resume after a timeout)
 set -euo pipefail
@@ -31,8 +31,8 @@ case "${1:?phase or stage}" in
     echo "submitted: corpus=$c stats_units=$s cache_train=$t cache_holdout=$h calibrate=$k export=$e"
     echo "logs: $CI_LOGS   watch: squeue -u \$USER" ;;
   test)   echo "test=$(sub test cpu 01:00:00)" ;;
-  probe1) echo "probe1=$(sub probe1 gpu 03:00:00)" ;;
-  probe2) echo "probe2=$(sub probe2 gpu 03:00:00)" ;;
+  serve)  echo "serve=$(sub serve gpu 12:00:00)  (cancel with scancel when the explain stage is done)" ;;
+  probe)  echo "probe=$(sub probe gpu 03:00:00)" ;;
   score)  echo "score=$(sub score cpu 01:00:00)" ;;
   corpus|export) echo "$1=$(sub "$1" cpu 08:00:00)" ;;
   stats_units|cache_holdout|calibrate) echo "$1=$(sub "$1" gpu 06:00:00)" ;;

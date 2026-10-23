@@ -36,14 +36,14 @@ neurons; the k-dose-response shows where interpretability breaks (if it does).
 | 2b | cache (holdout) | `02_cache.py --split holdout` | **GPU job**, short | → `data/cache/holdout` |
 | 3 | export blinded agent views | `03_export_agent_view.py` | CPU (needs tokenizer, corpus) | caches → `data/agent_cache`, private ground truth |
 | 4 | agent-free pilot | `04_pilot.py` | CPU | caches → `data/results/pilot_*` |
-| 5a | agents: explain | `05_run_agents.py --stage explain` | CPU + Claude | views → `data/agent_results/explain` |
-| 6a | probe round 1 | `06_build_probe_job.py --round 1` → **GPU job** `07_probe.py` | | explanations → probe scores |
-| 5b | agents: blindmax, simulate | `05_run_agents.py --stage blindmax|simulate` | CPU + Claude | |
-| 6b | probe round 2 | `06_build_probe_job.py --round 2` → **GPU job** | | blind-max texts → probe scores |
+| 5a | agents: explain | `05_run_agents.py --stage explain` (+ `05b_query_server.py` if `agents.query.enabled`) | CPU + Claude | views → `data/agent_results/explain` |
+| 5b | agents: write, simulate | `05_run_agents.py --stage write|simulate` | CPU + Claude | explanations → test texts, simulator ratings |
+| 6 | probe | `06_build_probe_job.py` → **GPU job** `07_probe.py` | | writer texts + baselines → `data/probe/probe_out.jsonl` |
 | 7b | calibrate thresholds | `07b_calibrate.py` | **GPU job**, minutes (CPU ok for small models) | random holdout windows → `data/calibration` (per-unit, per-length bar for `scoring.threshold=random_quantile`) |
-| 8 | score + analyze | `08_score_and_analyze.py --probe r1.jsonl r2.jsonl` | CPU | → `data/results/{equivalence.csv,summary.md,dose_response.png,...}` |
+| 8 | score + analyze | `08_score_and_analyze.py --probe probe_out.jsonl` | CPU | → `data/results/{equivalence.csv,summary.md,dose_response.png,...}` |
 
-GPU jobs: **5** (stats_units, cache_train, cache_holdout, probe r1, probe r2). Everything else is local.
+GPU jobs: **5** (stats_units, cache_train, cache_holdout, calibrate, probe; + the query service if enabled).
+On a Slurm cluster you can work on directly, use `slurm/submit.sh` (see `slurm/README.md`).
 `python scripts/make_job.py <stage> --name X` writes `jobs/pending/NNN_X/{run.sbatch,request.md,COMMANDS.txt}`;
 nothing touches the cluster — you review, then run `COMMANDS.txt` yourself (2FA included). See `docs/PROTOCOL.md`.
 
@@ -65,13 +65,12 @@ python scripts/03_export_agent_view.py
 python scripts/04_pilot.py                                        # agent-free sanity check, cheap
 python scripts/05_run_agents.py --stage explain --limit 5         # trial: check cost in data/agent_results/explain/_run_log.jsonl
 python scripts/05_run_agents.py --stage explain
-python scripts/06_build_probe_job.py --round 1
-python scripts/make_job.py probe --name probe_r1 --input data/probe/round1_in.jsonl     # run, fetch jobs/done/.../probe_out.jsonl
-python scripts/05_run_agents.py --stage blindmax
+python scripts/05_run_agents.py --stage write
 python scripts/05_run_agents.py --stage simulate
-python scripts/06_build_probe_job.py --round 2
-python scripts/make_job.py probe --name probe_r2 --input data/probe/round2_in.jsonl
-python scripts/08_score_and_analyze.py --probe jobs/done/*probe_r1/probe_out.jsonl jobs/done/*probe_r2/probe_out.jsonl
+python scripts/06_build_probe_job.py
+python scripts/make_job.py probe --name probe --input data/probe/probe_in.jsonl     # run, fetch jobs/done/.../probe_out.jsonl
+python scripts/make_job.py calibrate --name calibrate
+python scripts/08_score_and_analyze.py --probe jobs/done/*probe/probe_out.jsonl
 ```
 Dress rehearsal of every stage on a laptop (real datasets, Qwen3-0.6B on CPU, fake agents, ~10 min, data in
 `/tmp/combo_local`): run the Quick start commands with `--config configs/local_qwen3_0.6b.yaml`, calling
@@ -84,14 +83,21 @@ Dress rehearsal of every stage on a laptop (real datasets, Qwen3-0.6B on CPU, fa
   agent workspace. An automated test fails if condition names leak into a view. Identical instructions for all conditions.
 * **Explainer** sees top examples (one per document) with per-token activation tags, tiered examples (strong/moderate/weak),
   random-token baselines, token statistics, the other pole. It writes: explanation, `fires_on`, `parts` (independent triggers →
-  compactness), confidence, and 5 predicted-fire / 5 near-miss / 5 distant texts **before any measurement, with no feedback**.
-* **Blind-max writer** sees only the explanation and writes 3 texts meant to maximally fire the unit (essay's "blind maximum").
-* **Simulator** sees only the explanation and 20 held-out contexts (10 strong from the held-out corpus, 10 random) and scores 0-10.
-* No revision loop in v1 (feedback would turn the measurement into an optimisation and add a GPU round).
+  compactness), confidence. It works only by reading files (`view.md`, `long_contexts.md`, `data.json`): headless agents
+  may be refused any shell or tool call (e.g. on Enterprise accounts). Optionally (`agents.query`) it can run up to
+  `budget_texts` of its own texts through the model by writing `queries/NNN.txt`; a relay in the agent runner forwards
+  them to `05b_query_server.py` and writes `queries/NNN.out.md`. The budget is the same for every unit and condition.
+* **Writer** sees only the explanation and writes 3 texts meant to maximally fire the unit (essay's "blind maximum") plus
+  5 predicted-fire / 5 near-miss / 5 distant texts. All test texts therefore measure what the explanation conveys, not
+  what the explainer saw (an explainer writing them could copy its own top examples, which the pilot showed it does).
+* **Simulator** sees only the explanation and 20 held-out contexts, shuffled: 10 of group `top` (spread over the unit's
+  strongest held-out firings, `export.holdout_top_pool`) and 10 of group `random` (typical tokens). Scored overall and per
+  group: `sim_spearman_top` (does it rank intensity among strong firings?), `sim_spearman_random`, `sim_auc` (top rated
+  above random?), `sim_rating_random` (false alarms on ordinary text).
 
 Metrics per unit (primary pole; `r` = signed activation / the unit's corpus max): `rate_pred`, `rate_near`, `rate_distant`
 (fraction with `r >= 0.3`), `rate_null` (other units' texts: chance), `rate_rand` (random document prefixes), `margin = rate_pred - rate_near`,
-`blind_max_logratio`, `sim_spearman`, plus `n_parts` (compactness).
+`blind_max_logratio`, `sim_spearman` (+ per-group simulator metrics), plus `n_parts` (compactness) and `n_queries`.
 
 **What "fires strongly" means** (`scoring.threshold`): `corpus_frac` = the text's max reaches `strong_frac` (30%) of the
 unit's corpus max. Not comparable across conditions: Gaussian-like dense combos cross 30% of their max on most random
@@ -139,7 +145,7 @@ src/combo_interp/
   probe.py      GPU text scoring                            export.py    blinded views + ground truth
   pilot.py      agent-free metrics                          scoring.py   probe jobs + per-unit scores
   analyze.py    equivalence statistics, plots               interventions.py
-  agents/       prompts, validation, runner, unit_tools.py (stdlib helper copied into each workspace)
+  agents/       prompts, validation, runner, query_server.py (model queries) + relay.py (file-based access for agents)
 scripts/        00..08 stage CLIs, make_job.py              jobs/pending|done   handoff folders
 tests/          numpy tests, synthetic pipeline, torch tiny-model verification
 docs/PROTOCOL.md   the manual cluster handoff            CLAUDE.md   rules for an agent working in this repo

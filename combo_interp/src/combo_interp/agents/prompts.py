@@ -1,11 +1,16 @@
-"""Task texts for the three agent roles. All units get IDENTICAL instructions (condition-blind)."""
+"""Task texts for the three agent roles. All units get IDENTICAL instructions (condition-blind).
+
+explain   sees the unit's examples (and, optionally, can query the model) -> explanation
+write     sees ONLY the explanation -> texts meant to fire the unit maximally, plus predicted-fire / near-miss / distant
+simulate  sees ONLY the explanation -> predicted activations on held-out contexts
+"""
 
 EXPLAIN = """# Task: explain one unit of a language model
 
 You are given one scalar "unit" computed inside an intermediate layer of a large language model. For every token
 of a text the unit has an activation. `view.md` (read it first) shows contexts where the unit fires most strongly,
-at intermediate strengths, and at random, plus token statistics. `data.json` holds the same data, and
-`python unit_tools.py --help` lists helpers (longer contexts, grep, token statistics).
+at intermediate strengths, and at random, plus token statistics. `long_contexts.md` shows several hundred tokens of
+context before the strongest firings, and `data.json` holds the same data as view.md. Work only by reading these files.
 
 You are NOT told how the unit is built and you must not try to find out: stay inside this folder and treat the
 unit as a black box. Explain the PRIMARY pole (named at the top of view.md). Remarks about the other pole are optional.
@@ -21,8 +26,9 @@ unit as a black box. Explain the PRIMARY pole (named at the top of view.md). Rem
   unrelated jobs. List each *independent* trigger in `parts`. Merge triggers that are just one pattern described
   with different nouns; keep unrelated triggers separate. Do not force one story onto unrelated examples, and do
   not split one coherent pattern into many parts.
-- Your explanation will be TESTED by other agents who see only your text: one writes texts meant to fire the unit
-  maximally, another predicts activations on unseen contexts. Specific, falsifiable explanations score better.
+- Your explanation will be TESTED by other agents who see only your text: one writes new texts that should and
+  should not make the unit fire, another predicts the unit's activation on unseen contexts. Specific, falsifiable
+  explanations score better.
 
 ## Output
 Write `result.json` (valid JSON, exactly these keys):
@@ -32,26 +38,41 @@ Write `result.json` (valid JSON, exactly these keys):
   "parts": ["one short phrase per independent trigger (1-8 items)"],
   "other_pole": "<= 30 words, or empty string",
   "confidence": <integer 1-5>,
-  "predicted_fire": [5 short stand-alone texts (1-3 sentences each) you predict will make the unit fire strongly (>=30% of its max) on some token],
-  "near_miss": [5 short stand-alone texts, very similar in topic/wording, that you predict will NOT make it fire],
-  "distant": [5 short stand-alone texts about a concept as unrelated as possible to everything in your explanation; predicted not to fire],
   "notes": "optional free text"
 }
-Write the predicted / near-miss / distant texts now; you will get no feedback on them. The very first token of a
-text is ignored when scoring. Then stop.
+Then stop.
 """
 
-BLINDMAX = """# Task: write texts that maximally activate a described unit
+QUERY_ADDENDUM = """
+## Testing hypotheses on the model (before writing result.json)
+You can run your own texts through the model and see this unit's activation on every token. To do so, write a file
+`queries/001.txt` (then `queries/002.txt`, `queries/003.txt`, ...) with one text per line (write \\n for a line break
+inside a text; at most {per_call} texts per file). The answer appears a moment later as `queries/001.out.md`, in the same
+format as view.md; if it is not there yet when you read it, read it again. You have {budget} texts in total for this
+unit; every answer says how many are left. Use them to test and sharpen your hypothesis, e.g. minimal pairs that change
+one feature, texts that should fire and close variants that should not.
+"""
 
-Below is an explanation of one unit of a language model. You see ONLY this explanation, never the unit or any
-data. Write 3 different candidate texts (20-120 words each) designed to make the unit fire as strongly as
-possible, following the explanation literally and putting the firing pattern exactly where `fires_on` says it
-fires. Vary the three candidates (different wording, different contexts). The very first token of a text is ignored.
+WRITE = """# Task: write test texts for a described unit
+
+Below is an explanation of one unit (a scalar computed at every token) of a language model. You see ONLY this
+explanation, never the unit or any data. Follow the explanation literally, putting the firing pattern exactly where
+`fires_on` says the unit fires. Write:
+
+- "max_texts": 3 different texts (20-120 words each) designed to make the unit fire as strongly as possible. Vary them
+  (different wording, different contexts).
+- "predicted_fire": 5 short stand-alone texts (1-3 sentences) that should make the unit fire strongly on some token.
+- "near_miss": 5 short stand-alone texts, each very close in topic and wording to a predicted_fire text but missing
+  what the explanation says triggers the unit, so it should NOT fire.
+- "distant": 5 short stand-alone texts about things as unrelated as possible to the explanation; should not fire.
+
+The very first token of a text is ignored.
 
 explanation: {explanation}
 fires_on: {fires_on}
 
-Write `result.json` (valid JSON): {{"texts": ["...", "...", "..."]}}. Then stop.
+Write `result.json` (valid JSON): {{"max_texts": [3 texts], "predicted_fire": [5 texts], "near_miss": [5 texts],
+"distant": [5 texts]}}. Then stop.
 """
 
 SIMULATE = """# Task: predict how strongly a described unit fires on given contexts

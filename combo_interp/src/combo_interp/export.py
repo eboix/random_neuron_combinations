@@ -202,7 +202,7 @@ def render_view_md(d):
              f"Primary pole: **{d['primary_pole']}** (the direction with the strongest corpus firings; explain THIS pole).", "",
              "Marker legend: `[[tok|f]]` = the token this example was selected for; `«tok|f»` = other tokens in the window "
              "that also fire (f = fraction of the unit's corpus maximum on this pole, so 1.00 = strongest ever seen). "
-             "`↵` = newline. Windows are short; use `python unit_tools.py show --long` for longer context.", ""]
+             "`↵` = newline. Windows are short; `long_contexts.md` has longer context for the strongest examples.", ""]
     lines += ["## Strongest firings, primary pole (one per document)"]
     for e in d["examples"]["primary"]:
         lines.append(f"{e['i']:>2}. [{e['frac']:.2f}] {e['text']}")
@@ -239,7 +239,7 @@ def build_agent_cache(cfg, paths, tok, log=print):
         write_json(paths.blind_key, key, indent=0)
     inv = {u: b for b, u in key.items()}
     rng = np.random.default_rng(np.random.SeedSequence([int(cfg.seed), 4242]))
-    unit_ref, truth, index, by_cell = {}, {}, [], {}
+    unit_ref, truth, groups, index, by_cell = {}, {}, {}, [], {}
     out_dir = paths.agent_cache
     (out_dir / "holdout").mkdir(parents=True, exist_ok=True)
 
@@ -276,22 +276,25 @@ def build_agent_cache(cfg, paths, tok, log=print):
             # holdout items for the simulation score
             pole = "pos" if s > 0 else "neg"
             hv, hg = hbig[f"{pole}_vals"][col], hbig[f"{pole}_gid"][col]
-            hits = pick_spread(dedupe_hits(s * hv, hg, ho_store.seq_len, E["dedupe_max_per_seq"], limit=60),
-                               int(E["holdout_top_items"]))
+            # "top": spread over the unit's strongest deduped held-out firings; "random": uniformly random tokens
+            hits = pick_spread(dedupe_hits(s * hv, hg, ho_store.seq_len, E["dedupe_max_per_seq"],
+                                           limit=int(E.get("holdout_top_pool", 60))), int(E["holdout_top_items"]))
             items = []
             for _, v, g in hits:
                 seq, pos = divmod(g, ho_store.seq_len)
-                items.append((_render_window(ho_store, dec, seq, pos, int(E["holdout_before"]), int(E["holdout_after"]), None, 0.1), v / ref))   # v already signed
+                items.append((_render_window(ho_store, dec, seq, pos, int(E["holdout_before"]), int(E["holdout_after"]), None, 0.1),
+                              v / ref, "top"))   # v already signed
             if len(hgid):
                 rr = rng.choice(len(hgid), size=min(int(E["holdout_random_items"]), len(hgid)), replace=False)
                 for r in rr:
                     seq, pos = divmod(int(hgid[r]), ho_store.seq_len)
                     items.append((_render_window(ho_store, dec, seq, pos, int(E["holdout_before"]), int(E["holdout_after"]), None, 0.1),
-                                  s * float(hacts[r, col]) / ref))
+                                  s * float(hacts[r, col]) / ref, "random"))
             order = rng.permutation(len(items))
             items = [items[i] for i in order]
-            write_json(out_dir / "holdout" / f"{blind}.json", [{"item": i, "text": t} for i, (t, _) in enumerate(items)])
-            truth[blind] = [r for _, r in items]
+            write_json(out_dir / "holdout" / f"{blind}.json", [{"item": i, "text": t} for i, (t, _, _) in enumerate(items)])
+            truth[blind] = [r for _, r, _ in items]
+            groups[blind] = [g for _, _, g in items]
             ms = moments_stats(mom, col)
             unit_ref[blind] = {"unit_id": uid, "layer": L, "cond": m["cond"], "kind": m["kind"], "k": m["k"],
                                "primary": s, "ref": ref, "ref_other": ref_o, "std": float(std_u[col]), **{
@@ -311,4 +314,5 @@ def build_agent_cache(cfg, paths, tok, log=print):
     write_json(out_dir / "selection.json", selection)
     write_json(paths.unit_ref, unit_ref)
     write_json(paths.holdout_truth, truth)
+    write_json(paths.holdout_groups, groups)
     log(f"[export] {len(index)} units exported, {len(selection)} selected for agents -> {out_dir}")

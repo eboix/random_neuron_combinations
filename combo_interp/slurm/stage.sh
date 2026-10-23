@@ -17,11 +17,12 @@ case "$1" in
   calibrate)     python scripts/07b_calibrate.py $C ;;
   export)        python scripts/03_export_agent_view.py $C
                  python scripts/04_pilot.py $C ;;
-  probe1)        python scripts/06_build_probe_job.py $C --round 1
-                 python scripts/07_probe.py $C --job-file $D/probe/round1_in.jsonl --out $D/probe/round1_out.jsonl ;;
-  probe2)        python scripts/06_build_probe_job.py $C --round 2
-                 python scripts/07_probe.py $C --job-file $D/probe/round2_in.jsonl --out $D/probe/round2_out.jsonl ;;
-  score)         P="--probe $D/probe/round1_out.jsonl $D/probe/round2_out.jsonl"
+  serve)         # model query service for explainer agents; reach it from the laptop through an SSH tunnel
+                 echo "[serve] on the laptop: ssh -N -L 8765:$(hostname):8765 <you>@<login node>"
+                 python scripts/05b_query_server.py $C --host 0.0.0.0 --port 8765 ;;
+  probe)         python scripts/06_build_probe_job.py $C
+                 python scripts/07_probe.py $C --job-file $D/probe/probe_in.jsonl --out $D/probe/probe_out.jsonl ;;
+  score)         P="--probe $D/probe/probe_out.jsonl"
                  python scripts/08_score_and_analyze.py $C $P                                          # primary (config)
                  python scripts/08_score_and_analyze.py $C $P --set scoring.threshold=corpus_frac ;;    # sensitivity
   *) echo "unknown stage $1"; exit 2 ;;

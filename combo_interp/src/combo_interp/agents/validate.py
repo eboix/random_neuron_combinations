@@ -17,18 +17,21 @@ def validate_explain(o):
         errs.append("parts must be a list of 1-8 non-empty strings")
     if not isinstance(o.get("confidence"), int) or not 1 <= o["confidence"] <= 5:
         errs.append("confidence must be an int 1-5")
-    for k in ("predicted_fire", "near_miss", "distant"):
-        if not _strs(o.get(k), 5):
-            errs.append(f"{k} must be a list of exactly 5 non-empty strings")
     if "other_pole" in o and not isinstance(o["other_pole"], str):
         errs.append("other_pole must be a string")
     return errs
 
 
-def validate_blindmax(o):
-    if isinstance(o, dict) and _strs(o.get("texts"), 3):
-        return []
-    return ["texts must be a list of exactly 3 non-empty strings"]
+def validate_write(o):
+    if not isinstance(o, dict):
+        return ["not a JSON object"]
+    errs = []
+    if not _strs(o.get("max_texts"), 3):
+        errs.append("max_texts must be a list of exactly 3 non-empty strings")
+    for k in ("predicted_fire", "near_miss", "distant"):
+        if not _strs(o.get(k), 5):
+            errs.append(f"{k} must be a list of exactly 5 non-empty strings")
+    return errs
 
 
 def validate_simulate(o, n_items):

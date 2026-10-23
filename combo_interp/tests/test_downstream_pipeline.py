@@ -52,26 +52,32 @@ def test_full_downstream():
             assert max(truth[b]) > 0.3, (b, ref[b]["primary"], truth[b])          # strong holdout items stay positive
         assert len(truth[sel[0]]) == len(read_json(paths.agent_cache / "holdout" / f"{sel[0]}.json"))
 
-        # ---- agents (fake backend) + probe rounds (numpy emulation of the GPU job)
+        groups = read_json(paths.holdout_groups)                                    # simulator item groups
+        nt, nr = int(cfg.export.holdout_top_items), int(cfg.export.holdout_random_items)
+        assert all(groups[b].count("top") == nt and groups[b].count("random") == nr for b in sel)
+        assert all(len(groups[b]) == len(truth[b]) for b in sel)
+
+        # ---- agents (fake backend): explain -> write, simulate -> one probe round (numpy emulation of the GPU job)
         quiet = lambda *_: None
         run_stage(cfg, paths, "explain", log=quiet)
         assert len(list(paths.agent_results("explain").glob("u*.json"))) == len(sel)
-        p1 = build_probe_job(cfg, paths, 1, tok, log=quiet)
-        rows = [json.loads(l) for l in open(p1)]
-        assert {r["kind"] for r in rows} == {"pred", "near", "distant", "null", "rand"}
-        o1 = paths.data / "probe" / "round1_out.jsonl"
-        emulate_probe(cfg, paths, p1, o1, model, tok)
-        run_stage(cfg, paths, "blindmax", log=quiet)
-        p2 = build_probe_job(cfg, paths, 2, tok, log=quiet)
-        o2 = paths.data / "probe" / "round2_out.jsonl"
-        emulate_probe(cfg, paths, p2, o2, model, tok)
+        assert "predicted_fire" not in read_json(next(paths.agent_results("explain").glob("u*.json")))
+        run_stage(cfg, paths, "write", log=quiet)
         run_stage(cfg, paths, "simulate", log=quiet)
+        p1 = build_probe_job(cfg, paths, tok, log=quiet)
+        rows = [json.loads(l) for l in open(p1)]
+        assert {r["kind"] for r in rows} == {"blindmax", "pred", "near", "distant", "null", "rand"}
+        o1 = paths.data / "probe" / "probe_out.jsonl"
+        emulate_probe(cfg, paths, p1, o1, model, tok)
+        o2 = o1                                                                     # (single round now)
 
         # ---- scores + analysis
-        df = compute_scores(cfg, paths, [o1, o2], log=quiet)
+        df = compute_scores(cfg, paths, [o1], log=quiet)
         assert len(df) == len(sel)
-        for c in ("margin", "blind_max_logratio", "sim_spearman", "rate_null", "rate_rand", "n_parts"):
-            assert c in df.columns
+        for c in ("margin", "blind_max_logratio", "sim_spearman", "sim_spearman_top", "sim_spearman_random", "sim_auc",
+                  "sim_rating_top", "sim_rating_random", "rate_null", "rate_rand", "n_parts", "n_queries"):
+            assert c in df.columns, c
+        assert df.sim_auc.between(0, 1).all() and abs(df.sim_auc.mean() - 0.5) < 0.15   # fake simulator rates at random
         neu = df[df.cond == "neuron"]
         assert neu.rate_pred.mean() > neu.rate_rand.mean() + 0.2, "fake explainer should beat random text on neurons"
         assert neu.margin.mean() > 0.2
@@ -83,7 +89,7 @@ def test_full_downstream():
         # ---- per-unit thresholds calibrated on random text: every unit crosses on ~5% of random texts
         cfg_q, _ = smoke_cfg(tmp, ["scoring.threshold=random_quantile"])
         emulate_calibration(cfg_q, paths, model)
-        dq = compute_scores(cfg_q, paths, [o1, o2], log=quiet)
+        dq = compute_scores(cfg_q, paths, [o1], log=quiet)
         assert (paths.scores / "random_q0.95" / "unit_scores.csv").exists() and (dq.threshold == "random_q0.95").all()
         assert dq.rate_rand.mean() < 0.2, dq.groupby("cond").rate_rand.mean().to_dict()
         assert (dq.blind_max_logratio.fillna(0) == df.blind_max_logratio.fillna(0)).all()   # threshold-free metric unchanged

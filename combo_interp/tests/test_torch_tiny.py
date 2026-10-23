@@ -115,8 +115,10 @@ def test_downstream_on_real_cache_and_probe():
         run_cache(cfg, paths, "holdout", model=model, tok=tok, log=q)
         build_agent_cache(cfg, paths, tok, log=q)
         run_stage(cfg, paths, "explain", log=q)
-        p1 = build_probe_job(cfg, paths, 1, tok, log=q)
-        o1 = paths.data / "probe" / "round1_out.jsonl"
+        run_stage(cfg, paths, "write", log=q)
+        run_stage(cfg, paths, "simulate", log=q)
+        p1 = build_probe_job(cfg, paths, tok, log=q)
+        o1 = paths.data / "probe" / "probe_out.jsonl"
         run_probe(cfg, paths, p1, o1, model=model, tok=tok, log=q)
         # probe == direct computation
         rows = read_jsonl(o1)
@@ -130,13 +132,8 @@ def test_downstream_on_real_cache_and_probe():
             cap.run(torch.tensor(ids)[None])
             z = (cap.p[L][0].float() @ torch.tensor(us["A"][:, col]) + float(us["b"][col])).numpy()
         assert np.allclose(r["acts"], z, rtol=1e-3, atol=1e-3) and abs(r["max_act"] - z[1:].max()) < 1e-3
-        run_stage(cfg, paths, "blindmax", log=q)
-        p2 = build_probe_job(cfg, paths, 2, tok, log=q)
-        o2 = paths.data / "probe" / "round2_out.jsonl"
-        run_probe(cfg, paths, p2, o2, model=model, tok=tok, log=q)
-        run_stage(cfg, paths, "simulate", log=q)
-        df = compute_scores(cfg, paths, [o1, o2], log=q)
-        assert len(df) > 0 and df.margin.notna().any()
+        df = compute_scores(cfg, paths, [o1], log=q)
+        assert len(df) > 0 and df.margin.notna().any() and df.blind_max_ratio.notna().all() and df.sim_auc.notna().all()
         run_analysis(cfg, paths, log=q)
 
         # calibration via torch == direct computation on the same windows
@@ -152,8 +149,86 @@ def test_downstream_on_real_cache_and_probe():
         skip = int(cfg.cache.skip_first_tokens)
         assert np.allclose(cal["thr_pos"], window_thresholds(z, skip, C.quantiles), rtol=1e-3, atol=1e-3, equal_nan=True)
         cfg_q, _ = smoke_cfg(tmp, ["scoring.threshold=random_quantile"])
-        dq = compute_scores(cfg_q, paths, [o1, o2], log=q)
+        dq = compute_scores(cfg_q, paths, [o1], log=q)
         assert dq.rate_rand.notna().any() and dq.rate_rand.mean() < 0.3
+
+
+def test_query_service_end_to_end():
+    """Query service on the tiny model, reached the way agents reach it (files in the workspace, answered by the
+    relay) == direct computation; budget and truncation reported; the explain stage refuses to start when the
+    service is down; a (fake) explain stage with querying on round-trips through the relay."""
+    need("torch"); need("transformers")
+    import threading
+    import time
+    import pytest
+    import torch
+    from combo_interp.agents.query_server import UnitQueryEngine, make_server
+    from combo_interp.agents.relay import QueryRelay
+    from combo_interp.agents.run import _prepare, run_stage
+    from combo_interp.cache import run_cache
+    from combo_interp.export import build_agent_cache
+    from combo_interp.hooks import MLPCapture
+    from combo_interp.io_utils import read_json, read_jsonl
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, paths, model, tok, q = _world(tmp)
+        run_cache(cfg, paths, "train", model=model, tok=tok, log=q)
+        run_cache(cfg, paths, "holdout", model=model, tok=tok, log=q)
+        build_agent_cache(cfg, paths, tok, log=q)
+        cfg_q, _ = smoke_cfg(tmp, ["agents.query.enabled=true", "agents.query.budget_texts=3",
+                                   "agents.query.url=http://127.0.0.1:1"])            # nothing listens on port 1
+        with pytest.raises(RuntimeError, match="no query service"):
+            run_stage(cfg_q, paths, "explain", log=q)
+
+        engine = UnitQueryEngine(cfg_q, paths, model=model, tok=tok)
+        srv = make_server(engine, "127.0.0.1", 0)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        try:
+            cfg_q, _ = smoke_cfg(tmp, ["agents.query.enabled=true", "agents.query.budget_texts=3", f"agents.query.url={url}"])
+            blind = read_json(paths.agent_cache / "selection.json")[0]
+            work, _ = _prepare("explain", blind, paths, cfg_q)
+            task = (work / "TASK.md").read_text()
+            assert (work / "queries").is_dir() and "queries/001.txt" in task and "3 texts in total" in task
+            assert (work / "long_contexts.md").read_text().count("## Example") >= 1
+            relay = QueryRelay(paths.agent_work("explain"), url, poll=0.05, settle=0.05).start()
+
+            def ask(name, lines):
+                (work / "queries" / f"{name}.txt").write_text("\n".join(lines) + "\n")
+                out = work / "queries" / f"{name}.out.md"
+                for _ in range(400):
+                    if out.exists():
+                        return out.read_text()
+                    time.sleep(0.025)
+                raise AssertionError(f"no answer for {name}")
+            out = ask("001", ["the quick brown fox", "jumps over\\nthe lazy dog"])        # \n = line break in a text
+            assert out.count("[max ") == 2 and "budget: 1" in out and "↵" in out
+            out = ask("002", ["one more", "and another"])                                 # only 1 left
+            assert out.count("[max ") == 1 and "only the first 1" in out
+            assert "used up" in ask("003", ["nothing left"])
+            engine.budget = 10
+            assert "TRUNCATED" in ask("004", ["x" * (engine.max_tokens + 50)])          # long texts are cut, and say so
+            relay.stop()
+
+            # service numbers == direct computation on the same text
+            R = read_json(paths.unit_ref)[blind]
+            L = int(R["layer"])
+            us = load_unit_set(paths, L)
+            col = next(m["col"] for m in us["meta"] if m["unit_id"] == R["unit_id"])
+            log = read_jsonl(paths.query_log / f"{blind}.jsonl")
+            assert [x["text"] for x in log][:3] == ["the quick brown fox", "jumps over\nthe lazy dog", "one more"]
+            ids = tok("the quick brown fox", add_special_tokens=False)["input_ids"]
+            with MLPCapture(model, [L]) as cap:
+                cap.run(torch.tensor(ids)[None])
+                z = (cap.p[L][0].float() @ torch.tensor(us["A"][:, col]) + float(us["b"][col])).numpy()
+            expect = float((R["primary"] * z[1:] / R["ref"]).max())
+            assert abs(log[0]["max_frac"] - expect) < 1e-3
+
+            # whole explain stage (fake agents) with querying on: every unit's query is answered through the relay
+            run_stage(cfg_q, paths, "explain", log=q)
+            notes = [read_json(p)["notes"] for p in paths.agent_results("explain").glob("u*.json")]
+            assert notes and all("query budget:" in n for n in notes), notes[:2]       # every unit got an answer
+        finally:
+            srv.shutdown()
 
 
 def test_interventions():

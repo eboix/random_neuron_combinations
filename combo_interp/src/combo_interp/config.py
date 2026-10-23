@@ -113,3 +113,13 @@ class Paths:
     @property
     def holdout_truth(self) -> Path:
         return self.private / "holdout_truth.json"
+
+    @property
+    def holdout_groups(self) -> Path:
+        """Per simulator item: 'top' (strongest held-out firings) or 'random' (uniform tokens)."""
+        return self.private / "holdout_groups.json"
+
+    @property
+    def query_log(self) -> Path:
+        """Explainer model queries, one jsonl per unit (written by the query service)."""
+        return self.data / "query_log"

@@ -105,3 +105,14 @@ def test_window_thresholds_match_bruteforce():
     assert (np.diff(thr[1, 1:], axis=0) >= -1e-6).all()                       # longer texts -> higher bar
     neg = window_thresholds(-acts, 1, [0.95])
     assert np.isclose(neg[0, 5, 0], np.quantile((-acts[:, 1:6, 0]).max(1), 0.95), atol=1e-5)
+
+
+def test_simulation_metrics_by_group():
+    from combo_interp.scoring import simulation_metrics
+    true = [0.9, 0.7, 0.5, 0.4, 0.0, 0.01, -0.02, 0.03]                      # spearman needs >= 4 items per group
+    g = ["top"] * 4 + ["random"] * 4
+    perfect = simulation_metrics([10, 8, 6, 5, 0, 1, 0, 1], true, g)
+    assert perfect["sim_auc"] == 1.0 and perfect["sim_spearman_top"] == 1.0 and perfect["sim_rating_random"] == 0.5
+    blind = simulation_metrics([5] * 8, true, g)                               # rates everything the same
+    assert blind["sim_auc"] == 0.5 and np.isnan(blind["sim_spearman_top"])
+    assert set(simulation_metrics(list(range(8)), true)) == {"sim_spearman"}   # no groups (old exports)

@@ -1,13 +1,16 @@
 """Probe-job construction (CPU) and per-unit score computation (CPU).
 
 Metrics per unit (primary pole; r = signed activation along the pole / the unit's corpus maximum on that pole):
-  rate_pred / rate_near / rate_distant   fraction of the agent's own probe texts with r >= strong_frac
+  rate_pred / rate_near / rate_distant   fraction of the writer's texts that "fire strongly" (scoring.threshold);
+                                         the writer saw ONLY the explanation
   rate_null                              same, for OTHER units' predicted-fire texts (chance baseline)
   rate_rand                              same, for random document prefixes (base rate on ordinary text)
   margin                                 rate_pred - rate_near   (does the explanation discriminate?)
-  blind_max_ratio / _logratio            best r among 3 texts written by an agent that saw ONLY the explanation
+  blind_max_ratio / _logratio            best r among the writer's 3 max_texts
   sim_spearman                           rank correlation between a blind simulator's 0-10 predictions and the true
-                                         activation on held-out contexts (explanation-only)
+                                         activation on held-out contexts (explanation-only); with item groups also
+                                         sim_spearman_top / _random, sim_auc, sim_rating_top / _random
+  n_queries                              model queries the explainer used (agents.query)
   n_parts, confidence, expl_words        compactness / self-reported confidence
 """
 from __future__ import annotations
@@ -20,47 +23,42 @@ import pandas as pd
 from .io_utils import read_json, read_jsonl, write_jsonl
 
 
-# ------------------------------------------------------------------ probe jobs
-def build_probe_job(cfg, paths, round_id: int, tok=None, log=print):
+# ------------------------------------------------------------------ probe job
+def build_probe_job(cfg, paths, tok, log=print):
+    """One GPU round: the writer's texts (max / predicted / near-miss / distant) for every unit with a write result,
+    plus baselines: other units' predicted-fire texts (null) and random corpus-document prefixes (rand)."""
+    from .corpus import CorpusStore
     key = read_json(paths.blind_key)
-    rng = np.random.default_rng(np.random.SeedSequence([int(cfg.seed), 777, int(round_id)]))
     ref = read_json(paths.unit_ref)
+    rng = np.random.default_rng(np.random.SeedSequence([int(cfg.seed), 777]))
+    store = CorpusStore(paths.corpus("train"))
+    wr = {p.stem: read_json(p) for p in sorted(paths.agent_results("write").glob("u*.json"))}
+    by_layer = defaultdict(list)
+    for b in wr:
+        by_layer[ref[b]["layer"]].append(b)
     rows = []
-    if round_id == 1:
-        from .corpus import CorpusStore
-        store = CorpusStore(paths.corpus("train"))
-        expl = {p.stem: read_json(p) for p in sorted(paths.agent_results("explain").glob("u*.json"))}
-        by_layer = defaultdict(list)
-        for b, e in expl.items():
-            by_layer[ref[b]["layer"]].append(b)
-        for b, e in expl.items():
-            uid = key[b]
-            for kind, field in (("pred", "predicted_fire"), ("near", "near_miss"), ("distant", "distant")):
-                for i, t in enumerate(e[field]):
-                    rows.append({"probe_id": f"{b}|{kind}|{i}", "unit_id": uid, "kind": kind, "text": t})
-            pool = [o for o in by_layer[ref[b]["layer"]] if o != b]
-            if pool:
-                for i in range(int(cfg.scoring.n_null)):
-                    o = pool[rng.integers(len(pool))]
-                    t = expl[o]["predicted_fire"][rng.integers(5)]
-                    rows.append({"probe_id": f"{b}|null|{i}", "unit_id": uid, "kind": "null", "text": t})
-            for i in range(int(cfg.scoring.n_rand)):
-                for _ in range(20):
-                    seq = int(rng.integers(store.n_seqs))
-                    if store.seq_length(seq) >= int(cfg.scoring.rand_prefix_tokens):
-                        break
-                ids = store.get_tokens(seq, 0, int(cfg.scoring.rand_prefix_tokens))
-                rows.append({"probe_id": f"{b}|rand|{i}", "unit_id": uid, "kind": "rand", "text": tok.decode(ids.tolist())})
-    elif round_id == 2:
-        for p in sorted(paths.agent_results("blindmax").glob("u*.json")):
-            b = p.stem
-            for i, t in enumerate(read_json(p)["texts"]):
-                rows.append({"probe_id": f"{b}|blindmax|{i}", "unit_id": key[b], "kind": "blindmax", "text": t})
-    else:
-        raise ValueError(round_id)
-    out = paths.data / "probe" / f"round{round_id}_in.jsonl"
+    for b, w in wr.items():
+        uid = key[b]
+        for kind, field in (("blindmax", "max_texts"), ("pred", "predicted_fire"), ("near", "near_miss"),
+                            ("distant", "distant")):
+            for i, t in enumerate(w[field]):
+                rows.append({"probe_id": f"{b}|{kind}|{i}", "unit_id": uid, "kind": kind, "text": t})
+        pool = [o for o in by_layer[ref[b]["layer"]] if o != b]
+        if pool:
+            for i in range(int(cfg.scoring.n_null)):
+                o = pool[rng.integers(len(pool))]
+                t = wr[o]["predicted_fire"][rng.integers(5)]
+                rows.append({"probe_id": f"{b}|null|{i}", "unit_id": uid, "kind": "null", "text": t})
+        for i in range(int(cfg.scoring.n_rand)):
+            for _ in range(20):
+                seq = int(rng.integers(store.n_seqs))
+                if store.seq_length(seq) >= int(cfg.scoring.rand_prefix_tokens):
+                    break
+            ids = store.get_tokens(seq, 0, int(cfg.scoring.rand_prefix_tokens))
+            rows.append({"probe_id": f"{b}|rand|{i}", "unit_id": uid, "kind": "rand", "text": tok.decode(ids.tolist())})
+    out = paths.data / "probe" / "probe_in.jsonl"
     write_jsonl(out, rows)
-    log(f"[probe-job] round {round_id}: {len(rows)} texts for {len({r['unit_id'] for r in rows})} units -> {out}")
+    log(f"[probe-job] {len(rows)} texts for {len(wr)} units -> {out}")
     return out
 
 
@@ -109,12 +107,41 @@ def _hit_fn(cfg, paths, ref):
     return hit
 
 
+def simulation_metrics(pred, true, groups=None) -> dict:
+    """Simulator ratings vs true activations. With item groups ('top' = the unit's strongest held-out firings,
+    'random' = typical tokens) also: rank correlation within each group, how well top items are rated above random
+    ones (AUC, ties count 1/2), and the mean 0-10 rating per group (random = false alarms)."""
+    pred, true = np.asarray(pred, float), np.asarray(true, float)
+    out = {"sim_spearman": _spearman(pred, true)}
+    if groups is None or len(groups) != len(pred):
+        return out
+    g = np.asarray(groups)
+    top, rnd = g == "top", g == "random"
+    out["sim_spearman_top"] = _spearman(pred[top], true[top])
+    out["sim_spearman_random"] = _spearman(pred[rnd], true[rnd])
+    if top.any() and rnd.any():
+        d = pred[top][:, None] - pred[rnd][None, :]
+        out["sim_auc"] = float((d > 0).mean() + 0.5 * (d == 0).mean())
+    out["sim_rating_top"] = float(pred[top].mean()) if top.any() else np.nan
+    out["sim_rating_random"] = float(pred[rnd].mean()) if rnd.any() else np.nan
+    return out
+
+
+def _query_counts(paths) -> dict:
+    """{blind_id: number of texts the explainer ran through the query service}."""
+    if not paths.query_log.exists():
+        return {}
+    return {f.stem: sum(1 for _ in open(f)) for f in paths.query_log.glob("u*.jsonl")}
+
+
 def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
     ref = read_json(paths.unit_ref)
     truth = read_json(paths.holdout_truth)
     hit = _hit_fn(cfg, paths, ref)
     by_unit = defaultdict(lambda: defaultdict(list))
     hits = defaultdict(lambda: defaultdict(list))
+    groups = read_json(paths.holdout_groups) if paths.holdout_groups.exists() else {}
+    queried = _query_counts(paths)
     for f in probe_files:
         for r in read_jsonl(f):
             b, kind, _ = r["probe_id"].split("|")
@@ -142,10 +169,11 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
         bm = bm[~np.isnan(bm)]
         row["blind_max_ratio"] = float(bm.max()) if len(bm) else np.nan
         row["blind_max_logratio"] = float(np.log(max(bm.max(), 1e-3))) if len(bm) else np.nan
+        row["n_queries"] = queried.get(b, 0)
         sp = paths.agent_results("simulate") / f"{b}.json"
         if sp.exists() and b in truth:
             sc = read_json(sp)["scores"]
-            row["sim_spearman"] = _spearman([sc[str(i)] for i in range(len(truth[b]))], truth[b])
+            row.update(simulation_metrics([sc[str(i)] for i in range(len(truth[b]))], truth[b], groups.get(b)))
         else:
             row["sim_spearman"] = np.nan
         rows.append(row)

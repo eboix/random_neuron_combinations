@@ -4,7 +4,7 @@ from _common import setup
 
 
 def extra(ap):
-    ap.add_argument("--probe", nargs="+", required=True, help="probe output files (rounds 1 and 2)")
+    ap.add_argument("--probe", nargs="+", required=True, help="probe output file(s), e.g. data/probe/probe_out.jsonl")
 
 
 cfg, paths, args = setup(__doc__, extra)

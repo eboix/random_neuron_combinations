@@ -100,7 +100,8 @@ export:                     # what agents see
   mark_threshold: 0.1       # tokens with >= this fraction of max get an inline activation tag
   context_before_tiers: 32
   context_after_tiers: 8
-  holdout_top_items: 10
+  holdout_top_items: 10     # simulator items of group "top": spread evenly over the strongest `holdout_top_pool`
+  holdout_top_pool: 60      #   deduped held-out firings (raise it to include less extreme firings)
   holdout_random_items: 10
   holdout_before: 40
   holdout_after: 8
@@ -110,11 +111,19 @@ agents:
   backend: claude           # claude | fake
   claude_cmd: claude
   model: sonnet             # alias understood by the claude CLI
-  max_turns: {explain: 40, blindmax: 10, simulate: 10}
+  max_turns: {explain: 40, write: 10, simulate: 10}
   timeout_s: 1500
   concurrency: 4
   retries: 1
-  allowed_tools: ["Read", "Write", "Bash(python:*)"]
+  allowed_tools: ["Read", "Write", "Glob", "Grep"]   # no shell: agents only read/write files in their own folder
+                                                     # (model queries go through files, see agents.query)
+  query:                    # explainer may run its own texts through the model: it writes queries/NNN.txt, a relay in
+                            # 05_run_agents.py answers with queries/NNN.out.md (05b_query_server.py must be up)
+    enabled: false
+    url: http://127.0.0.1:8765
+    budget_texts: 20        # per unit, identical for every condition; texts the explainer queried are not scored
+    max_texts_per_call: 10
+    max_tokens_per_text: 256
 
 probe:
   max_tokens: 256
@@ -142,5 +151,6 @@ analysis:
   ci: 0.90                  # two one-sided tests at alpha=.05  <=> 90% CI inside the equivalence margin
   equiv_margin:             # pre-registered; change BEFORE looking at agent results
     margin: 0.10            # rate_pred - rate_near, on a 0-1 scale
-    sim_spearman: 0.10
+    sim_spearman: 0.10         # also used for sim_spearman_top (correlation within the top held-out items)
+    sim_auc: 0.05              # P(simulator rates a top item above a random one)
     blind_max_logratio: 0.25   # log(blind-max / corpus-max)

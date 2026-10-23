@@ -13,9 +13,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-METRICS = ["margin", "rate_pred", "sim_spearman", "blind_max_logratio"]
+METRICS = ["margin", "rate_pred", "sim_spearman", "sim_spearman_top", "sim_auc", "blind_max_logratio"]
 DELTA_KEY = {"margin": "margin", "rate_pred": "margin", "sim_spearman": "sim_spearman",
-             "blind_max_logratio": "blind_max_logratio"}
+             "sim_spearman_top": "sim_spearman", "sim_auc": "sim_auc", "blind_max_logratio": "blind_max_logratio"}
+
+
+def metrics_in(df, cfg=None):
+    """METRICS that have data (and, if cfg is given, a pre-registered margin)."""
+    out = [m for m in METRICS if m in df.columns and df[m].notna().any()]
+    if cfg is not None:
+        out = [m for m in out if DELTA_KEY[m] in cfg.analysis.equiv_margin]
+    return out
 
 
 def _strata(df, col):
@@ -55,7 +63,7 @@ def equivalence_table(df, cfg, base="neuron"):
     rows = []
     for cond in [c for c in dict.fromkeys(df.cond) if c != base]:
         sub = df[df.cond == cond]
-        for m in METRICS:
+        for m in metrics_in(df, cfg):
             delta = float(A.equiv_margin[DELTA_KEY[m]])
             est, lo, hi = boot_diff(sub, ref, m, int(A.n_boot), float(A.ci), rng)
             rows.append({"cond": cond, "metric": m, "n_cond": int(sub[m].notna().sum()), "n_base": int(ref[m].notna().sum()),
@@ -64,7 +72,7 @@ def equivalence_table(df, cfg, base="neuron"):
 
 
 def by_cond_table(df):
-    agg = {m: ["mean", "std", "count"] for m in METRICS + ["n_parts", "confidence", "rate_null", "rate_rand", "rate_distant"]
+    agg = {m: ["mean", "std", "count"] for m in metrics_in(df) + ["n_parts", "confidence", "rate_null", "rate_rand", "rate_distant"]
            if m in df.columns}
     t = df.groupby("cond", sort=False).agg(agg)
     t.columns = ["_".join(c) for c in t.columns]
@@ -105,9 +113,10 @@ def plot_dose_response(df, outdir, cfg):
     import matplotlib.pyplot as plt
     outdir = Path(outdir); outdir.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(cfg.seed + 8)
-    fig, axes = plt.subplots(1, len(METRICS), figsize=(4.4 * len(METRICS), 3.8), squeeze=False)
+    mets = metrics_in(df)
+    fig, axes = plt.subplots(1, len(mets), figsize=(4.4 * len(mets), 3.8), squeeze=False)
     base = df[df.cond == "neuron"]
-    for ax, m in zip(axes[0], METRICS):
+    for ax, m in zip(axes[0], mets):
         def mean_ci(x):
             x = x.dropna().to_numpy()
             if len(x) < 2:
@@ -144,7 +153,7 @@ def run_analysis(cfg, paths, log=print):
     eq = equivalence_table(df, cfg)
     eq.to_csv(out / "equivalence.csv", index=False)
     by_cond_table(df).to_csv(out / "by_cond.csv", index=False)
-    ols = pd.concat([ols_effects(df, m, cfg) for m in METRICS if df[m].notna().sum() > 10], ignore_index=True) \
+    ols = pd.concat([ols_effects(df, m, cfg) for m in metrics_in(df) if df[m].notna().sum() > 10], ignore_index=True) \
         if len(df) > 20 else pd.DataFrame()
     ols.to_csv(out / "ols_effects.csv", index=False)
     parts = df.groupby(["cond", "n_parts"]).agg(n=("margin", "size"), margin=("margin", "mean"),
