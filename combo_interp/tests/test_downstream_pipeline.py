@@ -107,6 +107,34 @@ def test_full_downstream():
         print("fake-explainer margin by condition:", df.groupby("cond").margin.mean().round(2).to_dict())
 
 
+def test_claude_backend_denies_private_data_and_repo():
+    """The claude CLI is started with deny rules for private/, the data root and this repo (shared cluster
+    filesystem), never for the agent's own workspace; workspaces inside private/ are refused."""
+    import stat
+    from pathlib import Path
+    import pytest
+    from combo_interp.agents.run import _claude, read_deny_roots
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        fake = tmp / "claude"
+        fake.write_text("#!/usr/bin/env python3\nimport json, sys\njson.dump(sys.argv[1:], open('argv.json', 'w'))\n")
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        cfg, paths = smoke_cfg(str(tmp), [f"paths.agent_work_root={tmp}/work", "agents.backend=claude",
+                                          f"agents.claude_cmd={fake}", f"agents.deny_read=[{tmp}/extra]"])
+        work = paths.agent_work("explain") / "u001"
+        work.mkdir(parents=True)
+        _claude(cfg, paths, "explain", work)
+        argv = json.loads((work / "argv.json").read_text())
+        denied = argv[argv.index("--disallowedTools") + 1:]
+        repo = Path(__file__).resolve().parents[2]
+        for root in (tmp / "private", tmp / "data", repo, tmp / "extra"):
+            assert f"Read(/{root.as_posix()}/**)" in denied, root
+        assert not any(str(paths.agent_work_root) in d for d in denied)
+        cfg2, paths2 = smoke_cfg(str(tmp), [f"paths.agent_work_root={tmp}/private/work"])
+        with pytest.raises(RuntimeError, match="inside private"):
+            read_deny_roots(cfg2, paths2)
+
+
 def test_claude_backend_refuses_workspace_under_claude_md():
     from pathlib import Path
     import pytest

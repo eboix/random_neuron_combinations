@@ -18,9 +18,10 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CI_ACCOUNT=${CI_ACCOUNT:-}                       # empty = your default account (sacctmgr show assoc user=$USER)
 export CI_CPU_PARTITION=${CI_CPU_PARTITION:-genoa-std-mem}
 export CI_CPU_CPUS=${CI_CPU_CPUS:-8}                    # -> 8 x 5632 MB = 44 GB
-export CI_GPU_PARTITION=${CI_GPU_PARTITION:-dgx-b200}
+export CI_GPU_PARTITION=${CI_GPU_PARTITION:-b200-mig45} # 45 GB fits Qwen3-8B; dgx-b200 is ~4x the compute
 export CI_GPUS=${CI_GPUS:-1}
-export CI_GPU_CPUS=${CI_GPU_CPUS:-28}                   # CPUs per GPU required by the partition (table above)
+export CI_GPU_CPUS=${CI_GPU_CPUS:-6}                    # CPUs per GPU required by the partition (table above)
+export CI_CLAUDE=${CI_CLAUDE:-$HOME/.local/bin/claude}  # agent stages; sign-in token in ~/.claude_token (claude setup-token)
 export CI_MAX_REQUEUES=${CI_MAX_REQUEUES:-5}            # cache stages requeue themselves at the time limit, at most this often
 export CI_CONFIG=${CI_CONFIG:-configs/cluster_qwen3_8b.yaml}
 export CI_CODE=${CI_CODE:-$HOME/projects/RandomNeuronCombinations/combo_interp}   # this folder, cloned on the cluster
@@ -42,4 +43,8 @@ export TOKENIZERS_PARALLELISM=false
 export HF_HUB_DISABLE_XET=1 HF_HUB_DOWNLOAD_TIMEOUT=120
 [ -f "$HOME/.hf_token" ] && export HF_TOKEN="$(cat "$HOME/.hf_token")"
 _ncpu="${SLURM_CPUS_PER_TASK:-8}"; export OMP_NUM_THREADS="$_ncpu" MKL_NUM_THREADS="$_ncpu"
+ci_query_enabled() {  # prints 1 if agents.query.enabled in $CI_CONFIG (explain then needs a GPU for the model)
+  (cd "$CI_CODE" && "$CI_VENV/bin/python" -c "import sys; sys.path.insert(0, 'src'); from combo_interp.config import load_config
+q = load_config('$CI_CONFIG').agents.get('query') or {}; print(int(bool(q.get('enabled'))))")
+}
 mkdir -p "$COMBO_DATA_ROOT" "$COMBO_PRIVATE_ROOT" "$CI_LOGS" "$HF_HOME"

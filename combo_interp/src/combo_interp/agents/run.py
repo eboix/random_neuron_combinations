@@ -118,11 +118,34 @@ def _fake(stage, work, paths, blind, rng):
     return {"cost": 0.0}
 
 
-def _claude(cfg, stage, work):
+def read_deny_roots(cfg, paths) -> list[Path]:
+    """Folders agents must not read or write: the blinding key, the run's data (other units, caches, query log), this
+    repository, plus agents.deny_read. Read/Glob/Grep accept absolute paths, so without these an agent on a shared
+    filesystem (cluster) could open private/. A folder that contains the workspaces is skipped (denying it would
+    block the agent's own files), except private/, which must never contain them."""
+    work = paths.agent_work_root.expanduser().resolve()
+    private = paths.private.expanduser().resolve()
+    if work == private or private in work.parents:
+        raise RuntimeError(f"agent workspaces ({work}) must not be inside private/ ({private})")
+    cands = [private, paths.data, Path(__file__).resolve().parents[4]] + list(cfg.agents.get("deny_read") or [])
+    out = []
+    for p in cands:
+        p = Path(p).expanduser().resolve()
+        if p != work and p not in work.parents and p not in out:
+            out.append(p)
+    return out
+
+
+def deny_rules(roots) -> list[str]:
+    """Claude Code permission rules; `//` marks an absolute path. Read rules also cover Glob and Grep."""
+    return [f"{tool}(/{r.as_posix()}/**)" for r in roots for tool in ("Read", "Edit", "Write")]
+
+
+def _claude(cfg, paths, stage, work):
     A = cfg.agents
     cmd = [A.claude_cmd, "-p", prompts.RUN_PROMPT, "--model", A.model, "--max-turns", str(A.max_turns[stage]),
            "--output-format", "json", "--permission-mode", "acceptEdits",   # without it Write is denied in -p mode
-           "--allowedTools", *A.allowed_tools]
+           "--allowedTools", *A.allowed_tools, "--disallowedTools", *deny_rules(read_deny_roots(cfg, paths))]
     t0 = time.time()
     r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=int(A.timeout_s),
                        stdin=subprocess.DEVNULL)    # otherwise the CLI waits 3 s for piped input
@@ -146,7 +169,7 @@ def run_one(cfg, paths, stage, blind):
     for attempt in range(int(cfg.agents.retries) + 1):
         (work / "result.json").unlink(missing_ok=True)
         try:
-            info = _fake(stage, work, paths, blind, rng) if cfg.agents.backend == "fake" else _claude(cfg, stage, work)
+            info = _fake(stage, work, paths, blind, rng) if cfg.agents.backend == "fake" else _claude(cfg, paths, stage, work)
         except subprocess.TimeoutExpired:
             info = {"error": "timeout"}
         rp = work / "result.json"
@@ -181,6 +204,7 @@ def run_stage(cfg, paths, stage, limit=None, only=None, log=print, dry_run=False
             raise RuntimeError(f"agent workspaces under {paths.agent_work(stage)} would load {[str(p) for p in leaks]} "
                                f"into every agent (breaks blinding). Set COMBO_AGENT_WORK (or paths.agent_work_root) "
                                f"to a folder with no CLAUDE.md above it, e.g. ~/combo_agent_work.")
+        log(f"[agents:{stage}] agents may not read: {[str(p) for p in read_deny_roots(cfg, paths)]}")
     q = _query_cfg(cfg)
     relay = None
     if stage == "explain" and q and not dry_run:

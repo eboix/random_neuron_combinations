@@ -117,6 +117,7 @@ agents:
   retries: 1
   allowed_tools: ["Read", "Write", "Glob", "Grep"]   # no shell: agents only read/write files in their own folder
                                                      # (model queries go through files, see agents.query)
+  deny_read: []             # extra folders agents may not read; private/, the data root and this repo are always denied
   query:                    # explainer may run its own texts through the model: it writes queries/NNN.txt, a relay in
                             # 05_run_agents.py answers with queries/NNN.out.md (05b_query_server.py must be up)
     enabled: false

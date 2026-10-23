@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generic job wrapper; resources and the stage name are passed by slurm/submit.sh, e.g.
-#   sbatch --job-name=ci_cache_train --partition=dgx-b200 --gpus=1 --cpus-per-task=28 ... slurm/job.sbatch cache_train
+#   sbatch --job-name=ci_cache_train --partition=b200-mig45 --gpus=1 --cpus-per-task=6 ... slurm/job.sbatch cache_train
 # Time-limit handling (cache stages; submit.sh adds --signal=B:USR1@... --requeue): Slurm sends USR1 to this script
 # shortly before the limit, it is forwarded to the stage, which checkpoints and exits 75, and the job requeues itself
 # under the SAME job ID, so jobs depending on it (export: afterok) keep waiting. At most CI_MAX_REQUEUES times.

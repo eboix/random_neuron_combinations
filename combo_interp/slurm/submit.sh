@@ -2,8 +2,11 @@
 # Submit a phase of the study from the cluster login node (run from the combo_interp folder):
 #   bash slurm/submit.sh test     CPU: test suite (do this first on a new cluster setup)
 #   bash slurm/submit.sh data     corpus -> stats_units -> {cache_train, cache_holdout, calibrate} -> export+pilot
-#   bash slurm/submit.sh serve    model query service for the explainer agents (only if agents.query.enabled)
-#   bash slurm/submit.sh probe    after the write / simulate results are synced up
+#   bash slurm/submit.sh agents   Claude agents on the cluster: explain -> {write, simulate}. explain runs on a GPU
+#                                 (model query service in the same job) only if agents.query.enabled, else on CPU
+#   bash slurm/submit.sh explain|write|simulate   one agent stage (resumable: rerun after a timeout / usage limit)
+#   bash slurm/submit.sh serve    query service for explainer agents running on a LAPTOP (SSH tunnel; see README)
+#   bash slurm/submit.sh probe    after the write / simulate results exist
 #   bash slurm/submit.sh score    scores + equivalence analysis (primary threshold + corpus_frac sensitivity)
 #   bash slurm/submit.sh <stage>  any single stage of slurm/stage.sh (e.g. cache_train to resume after a timeout)
 set -euo pipefail
@@ -30,8 +33,11 @@ T() {
   case $1 in
     corpus) echo 06:00:00 ;;  stats_units) echo 02:00:00 ;;  cache_train) echo 08:00:00 ;;
     cache_holdout) echo 02:00:00 ;;  calibrate) echo 01:00:00 ;;  export) echo 03:00:00 ;;
+    explain) echo 12:00:00 ;;  write|simulate) echo 06:00:00 ;;
   esac
 }
+
+explain_kind() { [ "$(ci_query_enabled)" = 1 ] && echo gpu || echo cpu; }
 
 case "${1:?phase or stage}" in
   data)
@@ -43,6 +49,13 @@ case "${1:?phase or stage}" in
     e=$(sub export cpu $(T export) "$t" "$h" "$k")
     echo "submitted: corpus=$c stats_units=$s cache_train=$t cache_holdout=$h calibrate=$k export=$e"
     echo "logs: $CI_LOGS   watch: squeue -u \$USER" ;;
+  agents)
+    x=$(sub explain $(explain_kind) $(T explain))
+    w=$(sub write cpu $(T write) "$x")
+    m=$(sub simulate cpu $(T simulate) "$x")
+    echo "submitted: explain=$x write=$w simulate=$m   (then: submit.sh probe, submit.sh score)" ;;
+  explain) echo "explain=$(sub explain $(explain_kind) $(T explain))" ;;
+  write|simulate) echo "$1=$(sub "$1" cpu $(T $1))" ;;
   test)   echo "test=$(sub test cpu 01:00:00)" ;;
   serve)  echo "serve=$(sub serve gpu 12:00:00)  (cancel with scancel when the explain stage is done)" ;;
   probe)  echo "probe=$(sub probe gpu 03:00:00)" ;;

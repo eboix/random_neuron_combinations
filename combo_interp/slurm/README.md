@@ -1,8 +1,7 @@
 # Running the study on a Slurm cluster
 
-GPU and CPU stages run on the cluster (`slurm/submit.sh`); the Claude agents run on a laptop where the `claude` CLI is
-signed in. Only the blinded agent views go to the laptop, so the blinding key and ground truth (`private/`) never sit
-next to an agent workspace.
+Everything runs on the cluster through `slurm/submit.sh`, including the Claude agents (Slurm jobs that call the
+Anthropic API). Running the agents on a laptop instead still works (end of this file).
 
 ## One-time setup (cluster login node)
 Defaults in `slurm/env.sh` target Penn PARCC's Betty (`ssh <PennKey>@slurm_login.parcc.upenn.edu`).
@@ -15,8 +14,11 @@ module load anaconda3 && conda create -y -p ~/envs/py311 python=3.11          # 
 ~/venvs/combo/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128
 ~/venvs/combo/bin/pip install -e ".[gpu,dev]"
 bash slurm/submit.sh test                                  # CPU job: full test suite incl. the torch checks
+curl -fsSL https://claude.ai/install.sh | bash             # agents: Claude Code CLI in ~/.local/bin
+claude setup-token                                         # save the printed token to ~/.claude_token, then:
+chmod 600 ~/.claude_token
 ```
-CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` (default `dgx-b200`) with `--gpus=$CI_GPUS`.
+CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` (default `b200-mig45`, 45 GB) with `--gpus=$CI_GPUS`.
 Betty's CLI filter derives memory from CPUs and fixes CPUs per GPU per partition, so the scripts never pass `--mem`;
 if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
 
@@ -24,7 +26,7 @@ if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
 | # | where | command | what |
 |---|---|---|---|
 | 1 | cluster | `bash slurm/submit.sh data` | corpus + model download (CPU, needs internet) -> stats/units -> train cache, holdout cache, calibration -> export + pilot. Chained with `afterok` |
-| 2 | laptop (+ cluster) | sync down; `05_run_agents.py --stage explain`, then `--stage write` and `--stage simulate`; sync up | all agents. If `agents.query.enabled`: first `bash slurm/submit.sh serve` and an SSH tunnel (below) |
+| 2 | cluster | `bash slurm/submit.sh agents` | explain, then write and simulate. explain runs on a GPU with the model query service in the same job if `agents.query.enabled`, else on CPU. Resumable: after a timeout or a usage limit, `bash slurm/submit.sh explain` (or write / simulate) again |
 | 3 | cluster | `bash slurm/submit.sh probe`, then `bash slurm/submit.sh score` | score the writer's texts, then scores + equivalence tests |
 
 `cache_train` / `cache_holdout` handle their time limit themselves: 20 min before it, Slurm signals the job, the stage
@@ -32,7 +34,15 @@ writes a checkpoint, and the job requeues under the same job ID (log: `[job] che
 keeps waiting on it. At most `CI_MAX_REQUEUES` (5) times; after that, or if requeueing is refused, resume by hand with
 `bash slurm/submit.sh cache_train`, then `scancel` the stuck export and `bash slurm/submit.sh export`.
 
-## Laptop side
+## Agents on the cluster: what keeps them blind
+Agents get only `Read`, `Write`, `Glob`, `Grep` (no shell, no web). Because the cluster filesystem also holds
+`private/`, every `claude` call carries deny rules for `private/`, the data root and this repository (plus
+`agents.deny_read`); the job log prints the list (`agents may not read: ...`). Workspaces live in `~/combo_agent_work`.
+The sign-in token is read from `~/.claude_token` inside the job, never passed at submit time. Transcripts are kept by
+the CLI under `~/.claude/projects/`; to check afterwards that no agent touched private files:
+`grep -l "combo_runs/.*/private" ~/.claude/projects/*combo-agent-work*/*.jsonl` (expect no output).
+
+## Alternative: agents on a laptop
 ```bash
 CL=<PennKey>@slurm_login.parcc.upenn.edu; R=combo_runs/qwen3_8b_v1/data; L=~/combo_runs/qwen3_8b_v1/data; cd combo_interp
 rsync -av $CL:$R/agent_cache $L/                                    # views only; private/ stays on the cluster
