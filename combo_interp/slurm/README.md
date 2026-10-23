@@ -27,8 +27,10 @@ if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
 | 2 | laptop (+ cluster) | sync down; `05_run_agents.py --stage explain`, then `--stage write` and `--stage simulate`; sync up | all agents. If `agents.query.enabled`: first `bash slurm/submit.sh serve` and an SSH tunnel (below) |
 | 3 | cluster | `bash slurm/submit.sh probe`, then `bash slurm/submit.sh score` | score the writer's texts, then scores + equivalence tests |
 
-If `cache_train` hits its time limit it leaves a checkpoint; `bash slurm/submit.sh cache_train` resumes it, then
-`bash slurm/submit.sh export`.
+`cache_train` / `cache_holdout` handle their time limit themselves: 20 min before it, Slurm signals the job, the stage
+writes a checkpoint, and the job requeues under the same job ID (log: `[job] checkpointed; requeueing ...`), so `export`
+keeps waiting on it. At most `CI_MAX_REQUEUES` (5) times; after that, or if requeueing is refused, resume by hand with
+`bash slurm/submit.sh cache_train`, then `scancel` the stuck export and `bash slurm/submit.sh export`.
 
 ## Laptop side
 ```bash

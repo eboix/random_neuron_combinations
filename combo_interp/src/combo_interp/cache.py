@@ -33,7 +33,9 @@ def gather_windows(acts_full, b_idx, t_idx, rows, offsets, lengths, skip_first):
     return torch.where(ok, out, torch.full_like(out, float("nan")))
 
 
-def run_cache(cfg, paths: Paths, split: str, model=None, tok=None, log=print, _stop_after=None):
+def run_cache(cfg, paths: Paths, split: str, model=None, tok=None, log=print, _stop_after=None, should_stop=None):
+    """should_stop(): polled after every batch; when it returns True, checkpoint and return "stopped" (used to save
+    progress just before a Slurm time limit, see slurm/job.sbatch)."""
     import torch
     from .corpus import CorpusStore
     from .hooks import MLPCapture
@@ -185,6 +187,10 @@ def run_cache(cfg, paths: Paths, split: str, model=None, tok=None, log=print, _s
             if _stop_after is not None and bi + 1 >= _stop_after:      # test hook: simulate a job timeout
                 save_ckpt(bi)
                 return
+            if should_stop is not None and should_stop():
+                save_ckpt(bi)
+                log(f"[cache:{split}] stop requested: checkpoint at batch {bi + 1}, {n_seen} tokens")
+                return "stopped"
 
     # ---- write outputs
     ug = torch.cat(uni_gid).numpy() if uni_gid else np.zeros(0, dtype=np.int64)

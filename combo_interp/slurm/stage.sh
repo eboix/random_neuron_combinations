@@ -12,8 +12,9 @@ case "$1" in
                  python -c "from huggingface_hub import snapshot_download as s; import yaml; s(yaml.safe_load(open('$CI_CONFIG'))['model']['name'])"
                  python scripts/00_prepare_corpus.py $C ;;
   stats_units)   python scripts/01_stats_and_units.py $C ;;
-  cache_train)   python scripts/02_cache.py $C --split train ;;        # resumable: resubmit after a timeout
-  cache_holdout) python scripts/02_cache.py $C --split holdout ;;
+  # exec: python must be the task process so the USR1 forwarded by srun reaches it (checkpoint + exit 75, job.sbatch)
+  cache_train)   exec python scripts/02_cache.py $C --split train ;;
+  cache_holdout) exec python scripts/02_cache.py $C --split holdout ;;
   calibrate)     python scripts/07b_calibrate.py $C ;;
   export)        python scripts/03_export_agent_view.py $C
                  python scripts/04_pilot.py $C ;;

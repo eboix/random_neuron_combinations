@@ -21,6 +21,7 @@ export CI_CPU_CPUS=${CI_CPU_CPUS:-8}                    # -> 8 x 5632 MB = 44 GB
 export CI_GPU_PARTITION=${CI_GPU_PARTITION:-dgx-b200}
 export CI_GPUS=${CI_GPUS:-1}
 export CI_GPU_CPUS=${CI_GPU_CPUS:-28}                   # CPUs per GPU required by the partition (table above)
+export CI_MAX_REQUEUES=${CI_MAX_REQUEUES:-5}            # cache stages requeue themselves at the time limit, at most this often
 export CI_CONFIG=${CI_CONFIG:-configs/cluster_qwen3_8b.yaml}
 export CI_CODE=${CI_CODE:-$HOME/projects/RandomNeuronCombinations/combo_interp}   # this folder, cloned on the cluster
 # Run data (~8 GB) and the model cache (Qwen3-8B, ~16 GB) must be on shared storage (jobs land on different nodes).

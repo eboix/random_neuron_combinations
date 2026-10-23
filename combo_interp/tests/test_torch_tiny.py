@@ -62,6 +62,8 @@ def test_cache_matches_bruteforce_and_resume():
         cfg, paths, model, tok, q = _world(tmp)
         run_cache(cfg, paths, "train", model=model, tok=tok, log=q, _stop_after=2)     # "timeout" after 2 batches
         assert (paths.data / "cache" / "train" / "ckpt.pt").exists()
+        assert run_cache(cfg, paths, "train", model=model, tok=tok, log=q,             # resume, then stop as on SIGUSR1
+                         should_stop=lambda: True) == "stopped"
         run_cache(cfg, paths, "train", model=model, tok=tok, log=q)                    # resume -> finish
         assert not (paths.data / "cache" / "train" / "ckpt.pt").exists()
         for L in cfg.model.layers:
