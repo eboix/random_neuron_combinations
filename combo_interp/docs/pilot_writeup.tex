@@ -1,0 +1,173 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+
+\title{Are random combinations of MLP neurons as interpretable as neurons?\\
+\large Pilot study on Qwen3-0.6B with blinded agentic explanations}
+\author{Rohan Buluswar}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\section{Question}
+The essay \emph{``Neural Networks Are Already Clean''} argues that a network's own neurons are privileged, legible
+building blocks. We test this against a null hypothesis: if random linear combinations of neurons are explained as
+well as single neurons by the same procedure, neurons are not special. Explanations are produced and evaluated by
+language-model agents that are blind to the type of unit they study.
+
+\section{Setup}
+
+\paragraph{Units.} At a decoder layer, let $p \in \mathbb{R}^{d_{\mathrm{ff}}}$ be the MLP hidden activation (the
+input of \texttt{down\_proj}, $\mathrm{silu}(W_g x)\odot W_u x$; $d_{\mathrm{ff}}=3072$). A unit is a direction and
+offset, $z = p^\top a + b$, evaluated at every token (position 0, an attention sink, is excluded everywhere). The
+conditions are listed in Table~\ref{tab:conditions}. Combinations are centered and scaled to unit variance; neurons
+keep their natural scale.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{ll}
+\toprule
+Condition & Construction \\
+\midrule
+\texttt{neuron} & one coordinate of $p$ (baseline) \\
+\texttt{ksparse\_k}, $k\in\{2,5,20,100\}$ & $k$ random neurons, Gaussian weights on z-scored neurons \\
+\texttt{related\_k}, $k\in\{5,20\}$ & a neuron and its $k-1$ most correlated neurons, sign-aligned (positive control) \\
+\texttt{dense\_raw} & random direction in $\mathbb{R}^{3072}$ \\
+\texttt{dense\_white} & random direction after ZCA whitening \\
+\bottomrule
+\end{tabular}
+\caption{Unit conditions. All units of a layer are drawn at random (fixed seed), with no selection on appearance.}
+\label{tab:conditions}
+\end{table}
+
+\paragraph{Model and data.} Qwen3-0.6B (28 layers), layers 7, 14 and 21. Corpus: 3M training and 0.3M held-out
+tokens (FineWeb, FineWeb-Edu, code, Wikipedia in 7 languages; documents up to 1024 tokens; every tenth document held
+out). One streaming pass computes activation statistics (1M tokens) to build the units; a second pass caches, per
+unit, the top-1024 firings in each direction, the top-64 with activation windows, and a uniform token sample.
+
+\paragraph{Agents.} Claude Sonnet 5.5 via the Claude Code CLI, each unit in an isolated folder, identified only by an
+opaque id; activations are shown as fractions of the unit's corpus maximum, never in raw units. Three roles:
+\begin{itemize}
+\item \textbf{Explainer} (sees examples): writes an explanation, a list of independent triggers (\emph{parts}), a
+confidence (1--5), and 5 predicted-firing, 5 near-miss and 5 unrelated texts, without feedback.
+\item \textbf{Blind-max writer} (sees only the explanation): writes 3 texts meant to maximise the unit.
+\item \textbf{Simulator} (sees only the explanation): rates 20 held-out contexts 0--10 for activation on a marked
+token; 10 are among the unit's strongest held-out firings, 10 are uniformly random tokens, shuffled together.
+\end{itemize}
+8 units per condition and layer were explained (216 units; 24 per condition). Agent cost: \$39.26
+(\$0.18 per unit over the three roles), with no failed sessions.
+
+\paragraph{Metrics.} \emph{Simulator correlation}: Spearman correlation between simulator ratings and true
+activations. \emph{Rate} metrics: share of a unit's probe texts that ``fire strongly''; \emph{margin} =
+rate(predicted) $-$ rate(near-miss). \emph{Blind-max ratio}: best blind-max text's activation divided by the unit's
+corpus maximum. Comparisons to \texttt{neuron} use a layer-stratified bootstrap 90\% interval of the difference in
+means (TOST-style verdicts with margin 0.10 for correlations and rates).
+
+\paragraph{What ``fires strongly'' means.} The original rule, at least 30\% of the unit's corpus maximum on some
+token, is not comparable across conditions: dense directions are nearly Gaussian, so 30\% of their maximum is close to
+ordinary noise (Table~\ref{tab:main}, last two columns). We therefore added a \emph{per-unit} threshold: a text fires
+if its maximum exceeds the 95th percentile of maxima over 500 random held-out windows of the same length, computed
+separately for each unit. Both definitions are reported.
+
+\section{Results}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+& Simulator & & & \multicolumn{2}{c}{Random-text firing rate} \\
+\cmidrule(lr){5-6}
+Condition & correlation & Parts & Confidence & 30\% of max & per-unit 95th pct \\
+\midrule
+\texttt{neuron}       & \textbf{0.66} & 2.7 & 3.3 & 0.02 & 0.05 \\
+\texttt{related\_5}   & \textbf{0.71} & 2.6 & 3.3 & 0.06 & 0.07 \\
+\texttt{related\_20}  & 0.50 & 2.5 & 3.1 & 0.05 & 0.06 \\
+\texttt{ksparse\_2}   & 0.57 & 3.1 & 3.3 & 0.02 & 0.08 \\
+\texttt{ksparse\_5}   & 0.58 & 2.9 & 3.2 & 0.01 & 0.09 \\
+\texttt{ksparse\_20}  & 0.51 & 3.1 & 3.1 & 0.01 & 0.04 \\
+\texttt{ksparse\_100} & 0.39 & 3.3 & 2.9 & 0.02 & 0.04 \\
+\texttt{dense\_white} & 0.32 & 3.6 & 2.7 & 0.20 & 0.06 \\
+\texttt{dense\_raw}   & 0.49 & 3.4 & 3.1 & 0.58 & 0.07 \\
+\bottomrule
+\end{tabular}
+\caption{Per-condition means over 24 units (three layers pooled). The last two columns check the threshold
+definitions: random text should rarely ``fire'' under either rule, equally across conditions.}
+\label{tab:main}
+\end{table}
+
+\paragraph{The simulator separates neurons from random combinations.} Simulator correlation decreases with the number
+of mixed neurons ($0.66$ for neurons; $0.57, 0.58, 0.51, 0.39$ for $k=2,5,20,100$; $0.32$ for whitened dense
+directions), while the positive control \texttt{related\_5} matches neurons. Differences from neurons (90\% intervals):
+\texttt{ksparse\_100} $-0.26\,[-0.36,-0.16]$ and \texttt{dense\_white} $-0.34\,[-0.43,-0.24]$ are clearly worse than
+the 0.10 margin; \texttt{dense\_raw} $-0.16\,[-0.26,-0.07]$, \texttt{ksparse\_20} $-0.15\,[-0.25,-0.05]$ and
+\texttt{related\_20} $-0.16\,[-0.27,-0.05]$ are below neurons but inconclusive against the margin. Explanations of
+mixtures also list more independent triggers and come with lower confidence.
+
+\paragraph{The gap is largest in the late layer.} Table~\ref{tab:layers} splits the simulator correlation by layer
+(8 units per cell). At layer 21, six of eight conditions are significantly below neurons (all but \texttt{related\_5}
+and \texttt{ksparse\_2}), and the decline with $k$ is steep. Layer 14 is the hardest for every condition: its neurons are the least sparse (median excess kurtosis 17,
+versus 102 and 479 at layers 7 and 21).
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{neuron}       & 0.59 & 0.59 & 0.78 & 0.66 \\
+\texttt{related\_5}   & 0.65 & 0.69 & 0.80 & 0.71 \\
+\texttt{related\_20}  & 0.49 & 0.41 & 0.60$^*$ & 0.50 \\
+\texttt{ksparse\_2}   & 0.48 & 0.55 & 0.69 & 0.57 \\
+\texttt{ksparse\_5}   & 0.51 & 0.55 & 0.69$^*$ & 0.58 \\
+\texttt{ksparse\_20}  & 0.49 & 0.47 & 0.56$^*$ & 0.51 \\
+\texttt{ksparse\_100} & 0.47 & 0.41$^*$ & 0.30$^*$ & 0.39 \\
+\texttt{dense\_white} & 0.31$^*$ & 0.51 & 0.14$^*$ & 0.32 \\
+\texttt{dense\_raw}   & 0.46 & 0.43$^*$ & 0.59$^*$ & 0.49 \\
+\bottomrule
+\end{tabular}
+\caption{Simulator correlation by layer. $^*$: 90\% bootstrap interval of the difference from neurons in the same
+layer excludes zero.}
+\label{tab:layers}
+\end{table}
+
+\paragraph{What drives the simulator score.} Splitting the 20 items: within the 10 random items the correlation is
+near zero for every condition (true activations there are essentially zero). The score is mostly the separation of
+strong from random items (AUC 0.84 for neurons, 0.90 for \texttt{related\_5}, 0.67--0.69 for \texttt{dense\_white} and
+\texttt{ksparse\_100}). Part of the drop is false alarms: the simulator rated 71\% of random items 0 for neurons but only
+25\% for \texttt{dense\_white}. Within the 10 strong items, neurons are the most predictable (0.45 versus 0.23--0.33),
+i.e.\ their explanations also capture firing intensity.
+
+\paragraph{The text-based metrics do not discriminate.} Agents' predicted-firing texts succeed at similar rates in every
+condition (88--97\% under the per-unit threshold, 71--93\% under the 30\% rule), and the median blind-max ratio is 0.71--0.90 in every condition (four
+mixtures are formally equivalent to neurons). Explanations quote the strongest examples, so writers can reproduce
+them without the explanation capturing a concept.
+
+\section{Problems found and fixed}
+\begin{itemize}
+\item \textbf{Threshold bias}: the 30\%-of-maximum rule counts 58\% of random texts as firing for \texttt{dense\_raw}
+(2\% for neurons). Fixed by the per-unit calibrated threshold (4--9\% for every condition on independent random text).
+\item \textbf{Sign error} for units whose primary direction is negative (about half): the simulator's answer key was
+negated, hiding the effect (correlations $+0.52$ and $-0.53$ by direction averaged to zero). Fixed and rescored
+without new agent runs. The same error showed negative strength labels in those units' example lists; scores of the
+affected units do not differ from the others.
+\item \textbf{Agent write permission}: the CLI refused agents' writes in headless mode until edits were explicitly
+allowed inside their own folder.
+\end{itemize}
+
+\section{Limitations}
+Small samples (24 units per condition, 20 simulator items per unit); a 0.6B model, whose neurons the essay expects to be
+less clean than in larger models; analysis choices were made after seeing this run, so it is a calibration study, not a
+pre-registered test; explainer, writer and simulator are the same model; agents could in principle read files outside
+their folder (no evidence they did: sessions took at most 5 turns).
+
+\section{Next step: Qwen3-8B on the cluster}
+Layers 9, 18, 27 of 36 ($d_{\mathrm{ff}}=12288$), the full 50M-token corpus with 2048-token documents, 200 units per
+condition and layer cached, and 24 per condition and layer explained (648 units). Before running agents, fix the primary
+metric (simulator correlation), the threshold (per-unit 95th percentile) and the equivalence margins, and remove quoted
+examples from the text given to the blind-max writer. Estimated cost: roughly 3--8 GPU-hours on one L40S or A100, and
+about \$120--160 of agent usage at the measured \$0.18--0.25 per unit.
+
+\end{document}

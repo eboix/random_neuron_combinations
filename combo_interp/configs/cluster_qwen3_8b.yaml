@@ -1,0 +1,11 @@
+# Main study on the cluster: Qwen3-8B (36 layers, d_ff 12288), GPU stages via slurm/submit.sh, agents on a laptop.
+# Paths come from env (COMBO_DATA_ROOT / COMBO_PRIVATE_ROOT, set in slurm/env.sh); agent workspaces on the laptop.
+# Decide everything under `scoring` and `analysis` BEFORE running agents (pre-registration).
+base: default.yaml
+experiment: qwen3_8b_v1
+model: {name: Qwen/Qwen3-8B, dtype: bfloat16, layers: [9, 18, 27]}
+units: {per_condition: 200}
+agents: {units_per_condition_per_layer: 24, backend: claude, concurrency: 4}   # 24 x 9 x 3 = 648 units
+scoring:
+  threshold: random_quantile    # primary definition of "fires strongly" (per-unit, calibrated on random text)
+  random_quantile: 0.95
