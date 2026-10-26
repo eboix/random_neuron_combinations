@@ -1,8 +1,18 @@
 # Experiment A — do neuron weights act as cluster centroids of the MLP input?
 
-*Qwen3-0.6B, layers 7 / 14 / 21, holdout split of `qwen3_0.6b_small_v1`. Run 2026-10-25. Code: `src/combo_interp/geometry.py`,
-`src/combo_interp/geometry_report.py`, `scripts/09_centroids.py`; raw outputs in
-`/Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/data/results/geometry/`.*
+*Qwen3-0.6B, layers 7 / 14 / 21, holdout split of `qwen3_0.6b_small_v1`. Run 2026-10-25; updated 2026-10-26 with
+variance explained as a second scoring metric and a Euclidean assignment rule (§4.7, §4.8). Code:
+`src/combo_interp/geometry.py`, `src/combo_interp/geometry_report.py`, `scripts/09_centroids.py`; raw outputs in
+`/Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/data/results/geometry/` (the 2026-10-25 cosine-only results are
+kept there as `*/centroids_centered_cosonly_2026-10-25.csv`).*
+
+**Summary.** Used as cluster centroids of the MLP input, the gate rows of a trained Qwen3-0.6B partition tokens
+better than random directions with the same internal geometry. The partitions are more informative about the text,
+and mixing neurons erodes this. None of it appears in an untrained model. But the gate rows are not the centres of
+the input's main clusters: random tokens make much better centroids. All of this holds whether partitions are scored
+by mean max-cosine or by variance explained. The one change under variance explained is that the full set of 3072
+gate rows ties covariance-matched random directions instead of trailing them. Assigning tokens by Euclidean distance
+to the weights at their native norms does not work: the partition collapses onto the shortest weight vectors.
 
 ## 1. Why this experiment
 
@@ -124,13 +134,18 @@ If neuron weights are learned cluster centroids as in the paper, then:
 
 ## 3. Results at a glance
 
-| prediction | outcome |
-|---|---|
-| 1. gate beats geometry-matched random sets | **Yes.** At every layer and M, and in every repetition |
-| 2. dilution with k | **Yes.** Monotone at every layer |
-| 3. gate sits on the dominant clusters | **No.** Gate rows are far worse than covariance-matched random directions and than random data points. On variance explained (§4.7) the full set of 3072 gate rows ties `rand_cov` but stays far below `data_pts` |
-| 4. gate > up | **Yes** on the objective (all 12 layer × M cells). **No** on label purity at large M, where `up` ties or wins |
-| 5. nothing in the random-init model | **Yes.** All weight-based sets are indistinguishable from random there |
+Cosine assignment; 12 cells = 3 layers × 4 values of M.
+
+| prediction | scored by `obj` (max-cosine, §4.1–4.3) | scored by `ve` (variance explained, §4.7) |
+|---|---|---|
+| 1. gate beats geometry-matched random sets | **Yes.** Every gate repetition beats every `rand_rot` repetition in all 12 cells | **Yes.** All 12 cells by median (+0.5 to +7.6 points); every repetition in 10 / 12 (not at M = 32, L7 and L21) |
+| 2. dilution with k | **Yes.** Monotone at every layer for M ≥ 128 | **Mostly.** gate > combo_2 in all 12 cells; full order gate > combo_2 > combo_5 > combo_20 in 8 / 12 |
+| 3. gate sits on the dominant clusters | **No.** Far below `rand_cov` (obj_norm −0.6 to −0.8) and `data_pts` | **No.** Below `rand_cov` by 2–9 points at M ≤ 512, ties it at M = 3072; below `data_pts` in all 12 cells (by 13.5–16.8 points at M = 3072) |
+| 4. gate > up | **Yes** in all 12 cells. **No** on label purity at large M, where `up` ties or wins | **Yes** in all 12 cells |
+| 5. nothing in the random-init model | **Yes.** All weight-based sets indistinguishable from random | **Yes.** gate − rand_rot between −1.4 and +1.4 points, with no consistent sign |
+
+The Euclidean rule (§4.8) is not in this table: with the weights at their native norms it measures how the norms are
+distributed, not alignment with the data.
 
 So neuron weights are **learned, data-aligned partitioners, but of low-variance directions, not of the data's main
 cluster structure**.
@@ -263,13 +278,19 @@ Trained model, same partitions as §4.1, median over repetitions, % of variance 
 
 * `ve_raw` is within ~1 point of `ve` everywhere (all cells in the CSV), so weighting tokens by their norm changes
   nothing.
-* Predictions 1, 2 and 4 survive. Every gate repetition beats every `rand_rot` repetition in 11 of 12 cells (both
-  metrics). `gate` > `up` in all 12. The full dilution order gate > combo_2 > combo_5 > combo_20 holds in 8 / 12 cells
-  for `ve` (9 / 12 for `ve_raw`); gate > combo_2 holds in every cell, the misorderings are among the combos.
+* Predictions 1, 2 and 4 survive. The gate median beats `rand_rot` in all 12 cells, by 0.5–7.6 points (largest at
+  L21, M = 512), and every gate repetition beats every `rand_rot` repetition in 10 of 12 (exceptions: M = 32 at L7
+  and L21; same for `ve_raw`). As with `obj`, the gap grows with M until M = 512. `gate` > `up` in all 12. The full
+  dilution order gate > combo_2 > combo_5 > combo_20 holds in 8 / 12 cells for `ve` (9 / 12 for `ve_raw`); gate >
+  combo_2 holds in every cell, the misorderings are among the combos.
 * **Prediction 3 is less clear-cut than on `obj`.** At M ≤ 512 gate rows are still well below `rand_cov`. With all
   3072 rows they tie it (31.7 vs 29.1, 32.0 vs 32.0, 37.3 vs 37.1), while `obj_norm` put them far below. They never
   approach `data_pts` or `kmeans`, so the conclusion that gate rows are not centres of the data's main clusters stands.
-* Random-init model: all weight-based sets are within noise of each other and of `rand_iso` on both metrics, as in §4.2.
+* Random-init model: as in §4.2, the weight-based sets do not separate. Their medians agree to within 0.3–2.4 points
+  (the spread grows with M), gate − rand_rot ranges from −1.4 to +1.4 points with no consistent sign, and the best
+  data-derived set is 2–16 points above all of them. Partitions of the untrained inputs explain much more variance overall
+  (e.g. 60–76 % at M = 3072, against 26–56 % trained): those inputs have more concentrated, easier-to-cluster
+  structure.
 
 ![ve_raw vs M](figures/geometry/ve_raw_centered.png)
 
@@ -301,15 +322,23 @@ rule that we have not run.)
 
 **What Experiment A supports.**
 * MLP gate weights are not arbitrary directions: training aligns them with the input distribution, and the resulting
-  partition is informative about tokens, next tokens and document type. This holds at every layer and set size, in
-  every repetition, and is absent at initialization.
+  partition is informative about tokens, next tokens and document type. On max-cosine this holds at every layer and
+  set size and in every repetition. On variance explained it holds in every cell by median and in every repetition
+  except at the smallest sets (M = 32, L7 and L21). It is absent at initialization.
 * Mixing neurons destroys this alignment gradually: `combo_2` keeps part of it, `combo_20` almost none. That is the
-  qualitative pattern the paper's mechanism predicts for our `ksparse_k` dose-response.
+  qualitative pattern the paper's mechanism predicts for our `ksparse_k` dose-response. The ordering among the combos
+  is noisier on variance explained than on max-cosine.
+* The conclusions do not hinge on the choice of metric. Max-cosine asks "is every token near *some* centroid";
+  variance explained asks "are tokens that share a centroid near *each other*". The two correlate only moderately
+  across all rows (r = 0.44), yet they agree on the outcome of every prediction (prediction 2 less cleanly on
+  variance explained).
 
 **What it does not support.**
 * The strong form of the paper's picture, "each neuron's weight vector is the centre of a data cluster", does not hold
   in Qwen3-0.6B. Gate rows are far from the dominant structure of the inputs (they carry no more input variance than a
-  random direction), and random tokens make much better cluster centres.
+  random direction), and random tokens make much better cluster centres. Variance explained softens this only for the
+  full set: all 3072 gate rows partition the inputs as well as 3072 covariance-matched random directions, but still
+  explain 13.5–16.8 points less variance than 3072 random tokens.
 * So if neurons are more explainable than combinations, it is **not** because each neuron owns one of the big,
   obvious clusters of the residual stream. A better reading is that neurons pick out *specific low-variance features*
   that are well aligned with linguistic structure (most clearly at layer 21). This is closer to the paper's "local
