@@ -639,6 +639,11 @@ python scripts/09_centroids.py --config configs/local_small_study.yaml --init ra
 python scripts/09_centroids.py --config configs/local_small_study.yaml --report
 ```
 
+Qwen3-8B on the cluster (`configs/cluster_qwen3_8b.yaml`: layers 9 / 18 / 27, M up to 12288 = all neurons, 200k
+holdout tokens): `bash slurm/submit.sh data` runs all four variants above on a GPU after `cache_holdout`
+(`bash slurm/submit.sh centroids` alone; finished variants are skipped). Results land in
+`combo_runs/qwen3_8b_v1/data/results/geometry/`.
+
 Each run evaluates every rule in `geometry.assign` (`combo_interp/configs/default.yaml`). Tables of every metric are in
 `summary_raw.md` / `summary_centered.md` next to the raw outputs. Tests: `combo_interp/tests/test_geometry.py`
 (planted Gaussian mixture, where the true means must beat every null; captured inputs must reproduce `gate_proj`

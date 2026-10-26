@@ -16,6 +16,15 @@ case "$1" in
   cache_train)   exec python scripts/02_cache.py $C --split train ;;
   cache_holdout) exec python scripts/02_cache.py $C --split holdout ;;
   calibrate)     python scripts/07b_calibrate.py $C ;;
+  centroids)     # Experiment A (docs/experiment_A_centroids_qwen.md): {trained, random init} x {centered, uncentered x};
+                 # every rule in geometry.assign (cos, euclid, ip). Resumable: finished runs are skipped.
+                 for init in trained random; do
+                   for center in true false; do
+                     tag=$([ $center = true ] && echo centered || echo raw)
+                     if [ -f "$D/results/geometry/$init/centroids_$tag.csv" ]; then echo "[centroids] $init/$tag exists, skipping"; continue; fi
+                     python scripts/09_centroids.py $C --init $init --set geometry.center=$center
+                   done
+                 done ;;
   export)        python scripts/03_export_agent_view.py $C
                  python scripts/04_pilot.py $C ;;
   explain|write|simulate)

@@ -5,6 +5,12 @@ base: default.yaml
 experiment: qwen3_8b_v1
 model: {name: Qwen/Qwen3-8B, dtype: bfloat16, layers: [9, 18, 27]}
 units: {per_condition: 200}
+# Experiment A (scripts/09_centroids.py) runs on the holdout uniform sample: 200k tokens (not 50k) so that M = 12288
+# (all neurons) still leaves ~8 evaluation tokens per cell, as M = 3072 did on Qwen3-0.6B with 50k.
+cache: {holdout: {tokens: 5000000, k_big: 256, k_prof: 0, uniform_samples: 200000}}
+geometry:
+  Ms: [32, 128, 512, 3072, 12288]
+  reps: {32: 10, 128: 10, 512: 5, 3072: 3, 12288: 3}
 agents: {units_per_condition_per_layer: 24, backend: claude, concurrency: 4}   # 24 x 9 x 3 = 648 units
 scoring:
   threshold: random_quantile    # primary definition of "fires strongly" (per-unit, calibrated on random text)

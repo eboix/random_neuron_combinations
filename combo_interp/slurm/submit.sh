@@ -1,7 +1,9 @@
 #!/bin/bash
 # Submit a phase of the study from the cluster login node (run from the combo_interp folder):
 #   bash slurm/submit.sh test     CPU: test suite (do this first on a new cluster setup)
-#   bash slurm/submit.sh data     corpus -> stats_units -> {cache_train, cache_holdout, calibrate} -> export+pilot
+#   bash slurm/submit.sh data     corpus -> stats_units -> {cache_train, cache_holdout, calibrate} -> export+pilot;
+#                                 also Experiment A (centroids) after cache_holdout
+#   bash slurm/submit.sh centroids   Experiment A alone (resumable: finished runs are skipped)
 #   bash slurm/submit.sh agents   Claude agents on the cluster: explain -> {write, simulate}. explain runs on a GPU
 #                                 (model query service in the same job) only if agents.query.enabled, else on CPU
 #   bash slurm/submit.sh explain|write|simulate   one agent stage (resumable: rerun after a timeout / usage limit)
@@ -32,7 +34,7 @@ sub() {  # sub <stage> <cpu|gpu> <time> [dependency job ids...]
 T() {
   case $1 in
     corpus) echo 06:00:00 ;;  stats_units) echo 02:00:00 ;;  cache_train) echo 08:00:00 ;;
-    cache_holdout) echo 02:00:00 ;;  calibrate) echo 01:00:00 ;;  export) echo 03:00:00 ;;
+    cache_holdout) echo 02:00:00 ;;  calibrate) echo 01:00:00 ;;  export) echo 03:00:00 ;;  centroids) echo 06:00:00 ;;
     explain) echo 12:00:00 ;;  write|simulate) echo 06:00:00 ;;
   esac
 }
@@ -47,7 +49,8 @@ case "${1:?phase or stage}" in
     h=$(sub cache_holdout gpu $(T cache_holdout) "$s")
     k=$(sub calibrate gpu $(T calibrate) "$s")
     e=$(sub export cpu $(T export) "$t" "$h" "$k")
-    echo "submitted: corpus=$c stats_units=$s cache_train=$t cache_holdout=$h calibrate=$k export=$e"
+    g=$(sub centroids gpu $(T centroids) "$h")
+    echo "submitted: corpus=$c stats_units=$s cache_train=$t cache_holdout=$h calibrate=$k export=$e centroids=$g"
     echo "logs: $CI_LOGS   watch: squeue -u \$USER" ;;
   agents)
     x=$(sub explain $(explain_kind) $(T explain))
@@ -61,6 +64,6 @@ case "${1:?phase or stage}" in
   probe)  echo "probe=$(sub probe gpu 03:00:00)" ;;
   score)  echo "score=$(sub score cpu 01:00:00)" ;;
   corpus|export) echo "$1=$(sub "$1" cpu $(T $1))" ;;
-  stats_units|cache_train|cache_holdout|calibrate) echo "$1=$(sub "$1" gpu $(T $1))" ;;
+  stats_units|cache_train|cache_holdout|calibrate|centroids) echo "$1=$(sub "$1" gpu $(T $1))" ;;
   *) echo "unknown phase/stage $1"; exit 2 ;;
 esac

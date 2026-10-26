@@ -121,26 +121,26 @@ def random_rotation(d, rng):
     return q * np.sign(np.diag(r))
 
 
-def spherical_kmeans(Xn, M, rng, iters=20, chunk=8192):
+def spherical_kmeans(Xn, M, rng, iters=20, chunk=8192, device="cpu"):
     """Xn: unit rows. Returns (M, d) unit centroids (k-means++-lite: random data init)."""
     import torch
-    X = torch.from_numpy(np.ascontiguousarray(Xn, dtype=np.float32))
-    C = X[torch.from_numpy(rng.choice(len(X), M, replace=False))].clone()
+    X = torch.from_numpy(np.ascontiguousarray(Xn, dtype=np.float32)).to(device)
+    C = X[torch.from_numpy(rng.choice(len(X), M, replace=False)).to(device)].clone()
     for _ in range(iters):
         a = assign(X, C, chunk)
         S = torch.zeros_like(C).index_add_(0, a, X)
         empty = S.norm(dim=1) < 1e-8
         if empty.any():          # re-seed empty clusters with random points
-            S[empty] = X[torch.from_numpy(rng.choice(len(X), int(empty.sum()), replace=False))]
+            S[empty] = X[torch.from_numpy(rng.choice(len(X), int(empty.sum()), replace=False)).to(device)]
         C = S / S.norm(dim=1, keepdim=True)
-    return C.numpy()
+    return C.cpu().numpy()
 
 
-def euclidean_kmeans(X, M, rng, iters=20, chunk=8192):
+def euclidean_kmeans(X, M, rng, iters=20, chunk=8192, device="cpu"):
     """Lloyd k-means on raw rows X (random data init). Returns (M, d) centroids."""
     import torch
-    X = torch.from_numpy(np.ascontiguousarray(X, dtype=np.float32))
-    C = X[torch.from_numpy(rng.choice(len(X), M, replace=False))].clone()
+    X = torch.from_numpy(np.ascontiguousarray(X, dtype=np.float32)).to(device)
+    C = X[torch.from_numpy(rng.choice(len(X), M, replace=False)).to(device)].clone()
     for _ in range(iters):
         a = assign(X, C, chunk, bias=-0.5 * (C * C).sum(1))
         n = torch.bincount(a, minlength=M)
@@ -148,8 +148,8 @@ def euclidean_kmeans(X, M, rng, iters=20, chunk=8192):
         C = S / n.clamp(min=1)[:, None].float()
         empty = n == 0
         if empty.any():          # re-seed empty clusters with random points
-            C[empty] = X[torch.from_numpy(rng.choice(len(X), int(empty.sum()), replace=False))]
-    return C.numpy()
+            C[empty] = X[torch.from_numpy(rng.choice(len(X), int(empty.sum()), replace=False)).to(device)]
+    return C.cpu().numpy()
 
 
 def assign(X, C, chunk=8192, return_max=False, bias=None):
@@ -167,7 +167,7 @@ def assign(X, C, chunk=8192, return_max=False, bias=None):
     return (a, torch.cat(m)) if return_max else a
 
 
-def make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats=None):
+def make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats=None, device="cpu"):
     """Raw-scale rows of one centroid set (kmeans: unit rows of spherical k-means). gstats = (mean, cov_sqrt) of the
     gate rows, for rand_gcov."""
     d = Wg.shape[1]
@@ -192,7 +192,7 @@ def make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats=None):
     if name == "data_pts":
         return Xfit[rng.choice(len(Xfit), M, replace=False)]
     if name == "kmeans":
-        return spherical_kmeans(Xfit_n, M, rng)
+        return spherical_kmeans(Xfit_n, M, rng, device=device)
     raise ValueError(name)
 
 
@@ -214,8 +214,8 @@ def nmi(a, y):
 def var_explained(X, a, M):
     """1 - within-cluster SS / total SS of the partition `a` of rows X (torch); cluster means from X itself."""
     import torch
-    sizes = torch.bincount(a, minlength=M).double()
-    means = torch.zeros((M, X.shape[1]), dtype=X.dtype).index_add_(0, a, X) / sizes.clamp(min=1)[:, None].to(X.dtype)
+    sizes = torch.bincount(a, minlength=M).to(X.dtype)      # exact for counts < 2^24
+    means = torch.zeros((M, X.shape[1]), dtype=X.dtype, device=X.device).index_add_(0, a, X) / sizes.clamp(min=1)[:, None]
     ssw = ((X - means[a]) ** 2).sum()
     sst = ((X - X.mean(0)) ** 2).sum()
     return float(1 - ssw / sst)
@@ -238,9 +238,9 @@ def partition_metrics(Xn, C, labels, rng, Xc=None, rule="cos"):
         a, m = assign(Xn, C, return_max=True)
         fit = {"obj": float(m.mean()), "dist": float("nan")}
     M = C.shape[0]
-    sizes = torch.bincount(a, minlength=M).double()
+    sizes = torch.bincount(a, minlength=M).cpu().double()   # float64 on the CPU (MPS has no float64)
     p = sizes[sizes > 0] / sizes.sum()
-    a_np = a.numpy()
+    a_np = a.cpu().numpy()
     res = {**fit, "ve": var_explained(Xn, a, M), "ve_raw": var_explained(Xc, a, M) if Xc is not None else float("nan"),
            "eff_k": float(torch.exp(-(p * p.log()).sum())), "used": int((sizes > 0).sum())}
     perm = rng.permutation(a_np)        # same cluster sizes, no relation to x: chance level of NMI
@@ -252,13 +252,14 @@ def partition_metrics(Xn, C, labels, rng, Xc=None, rule="cos"):
 
 # ----------------------------------------------------------------------------- driver
 def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), center=True, seed=0, log=print,
-                  assign_rules=("cos",)):
+                  assign_rules=("cos",), device="cpu"):
     """X (n,d) MLP inputs; fit_mask selects the fit half (eval = ~fit_mask). Returns a list of result rows.
     Wg = the neurons' input weights (gate rows; for a plain GELU MLP the first linear layer's rows). Wu = None
     (no gated value branch) drops the `up` set. assign_rules: subset of ("cos", "euclid", "ip"); "euclid" and "ip"
     reuse the sets drawn for "cos", and they and the rand_gcov set have their own rngs, so the other cos rows do not
     depend on whether they run. ip covers the weight-like sets only (IP_SETS); rows without a native norm (rand_iso,
-    combo_k) get the norms of randomly drawn gate rows."""
+    combo_k) get the norms of randomly drawn gate rows. device: where partitions and k-means are computed ("cuda" for
+    large models; sets are still drawn with numpy on the CPU, so results match the CPU run up to float rounding)."""
     import torch
     rng = np.random.default_rng(seed)
     rng_e = np.random.default_rng(seed + 10_000)
@@ -272,8 +273,8 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
         X = X - X[fit_mask].mean(0)
     Xn = unit_rows(X)
     Xfit, Xfit_n = X[fit_mask], Xn[fit_mask]
-    Xev = torch.from_numpy(np.ascontiguousarray(Xn[~fit_mask]))
-    Xev_raw = torch.from_numpy(np.ascontiguousarray(X[~fit_mask]))
+    Xev = torch.from_numpy(np.ascontiguousarray(Xn[~fit_mask])).to(device)
+    Xev_raw = torch.from_numpy(np.ascontiguousarray(X[~fit_mask])).to(device)
     x_norm = float(np.linalg.norm(Xfit, axis=1).mean())
     lab_ev = {k: v[~fit_mask] for k, v in labels.items()}
     w, V = np.linalg.eigh(np.cov(X[fit_mask], rowvar=False))
@@ -286,8 +287,8 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
                 if name in ("gate", "up") and M >= len(Wg) and r > 0:
                     continue        # the full weight set has no sampling variability
                 srng = rng_g if name == "rand_gcov" else rng
-                raw = make_set(name, M, srng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats)
-                C = torch.from_numpy(unit_rows(raw).astype(np.float32))
+                raw = make_set(name, M, srng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats, device=device)
+                C = torch.from_numpy(unit_rows(raw).astype(np.float32)).to(device)
                 if "cos" in assign_rules:
                     rows.append({"assign": "cos", "set": name, "M": M, "rep": r,
                                  **partition_metrics(Xev, C, lab_ev, srng, Xc=Xev_raw)})
@@ -295,17 +296,17 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
                     Ci = raw
                     if name == "rand_iso" or name.startswith("combo_"):
                         Ci = unit_rows(raw) * rng_i.choice(g_norms, M)[:, None]
-                    Ci = torch.from_numpy(np.ascontiguousarray(Ci, dtype=np.float32))
+                    Ci = torch.from_numpy(np.ascontiguousarray(Ci, dtype=np.float32)).to(device)
                     rows.append({"assign": "ip", "set": name, "M": M, "rep": r,
                                  **partition_metrics(Xev, Ci, lab_ev, rng_i, Xc=Xev_raw, rule="ip")})
                 if "euclid" in assign_rules:
                     if name == "kmeans":
-                        Ce = euclidean_kmeans(Xfit, M, rng_e)
+                        Ce = euclidean_kmeans(Xfit, M, rng_e, device=device)
                     elif name == "data_pts":
                         Ce = raw
                     else:
                         Ce = raw * (x_norm / np.linalg.norm(raw, axis=1).mean())
-                    Ce = torch.from_numpy(np.ascontiguousarray(Ce, dtype=np.float32))
+                    Ce = torch.from_numpy(np.ascontiguousarray(Ce, dtype=np.float32)).to(device)
                     rows.append({"assign": "euclid", "set": name, "M": M, "rep": r,
                                  **partition_metrics(Xev, Ce, lab_ev, rng_e, Xc=Xev_raw, rule="euclid")})
             log(f"[geometry] M={M} rep={r} done")

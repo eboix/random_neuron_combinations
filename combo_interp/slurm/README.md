@@ -25,7 +25,7 @@ if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
 ## Phases
 | # | where | command | what |
 |---|---|---|---|
-| 1 | cluster | `bash slurm/submit.sh data` | corpus + model download (CPU, needs internet) -> stats/units -> train cache, holdout cache, calibration -> export + pilot. Chained with `afterok` |
+| 1 | cluster | `bash slurm/submit.sh data` | corpus + model download (CPU, needs internet) -> stats/units -> train cache, holdout cache, calibration -> export + pilot. Chained with `afterok`. Also Experiment A (`centroids`, after the holdout cache; `docs/experiment_A_centroids_qwen.md`) |
 | 2 | cluster | `bash slurm/submit.sh agents` | explain, then write and simulate. explain runs on a GPU with the model query service in the same job if `agents.query.enabled`, else on CPU. Resumable: after a timeout or a usage limit, `bash slurm/submit.sh explain` (or write / simulate) again |
 | 3 | cluster | `bash slurm/submit.sh probe`, then `bash slurm/submit.sh score` | score the writer's texts, then scores + equivalence tests |
 

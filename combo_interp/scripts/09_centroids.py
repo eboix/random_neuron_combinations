@@ -52,8 +52,11 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model, tok = load_model(cfg, device)
 if args.init == "random":
     from transformers import AutoModelForCausalLM
+    config = model.config
+    del model                       # free the trained weights first (two 8B models do not fit a 45 GB GPU slice)
+    torch.cuda.empty_cache() if device == "cuda" else None
     torch.manual_seed(int(g.random_init_seed))
-    model = AutoModelForCausalLM.from_config(model.config, dtype=getattr(torch, cfg.model.dtype)).to(device).eval()
+    model = AutoModelForCausalLM.from_config(config, dtype=getattr(torch, cfg.model.dtype)).to(device).eval()
 
 store = CorpusStore(paths.corpus(g.split))
 gids = np.load(paths.cache(g.split, layers[0]) / "uniform.npz")["gid"].astype(np.int64)
@@ -87,7 +90,7 @@ for L in layers:
     reps = {min(int(k), Wg.shape[0]): int(v) for k, v in dict(g.reps).items()}
     for r in centroid_eval(X, Wg, Wu, labels, fit, Ms, reps, combo_ks=list(g.combo_ks), center=bool(g.center),
                            seed=int(cfg.seed) + L, log=lambda m, L=L: print(f"L{L} {m}", flush=True),
-                           assign_rules=tuple(g.assign)):
+                           assign_rules=tuple(g.assign), device=device):
         rows.append({"init": args.init, "layer": L, **r})
 pd.DataFrame(rows).to_csv(out / f"centroids_{tag}.csv", index=False)
 print(json.dumps({"rows": len(rows), "out": str(out)}))
