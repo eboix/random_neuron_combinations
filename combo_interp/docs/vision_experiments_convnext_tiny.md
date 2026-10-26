@@ -164,8 +164,11 @@ Medians, stage2.block8 / stage3.block2:
   their top images from a single constituent (≥ 90 % of firings). They are as local and as CLIP-coherent as neurons
   (stage3: ksparse_5 0.704 vs neuron 0.689), the same as in the LM. Only `ksparse_100` in stage3 spreads (6.6 drivers)
   and loses coherence (0.633).
-* **Per-neuron centroid.** A neuron's `W_in` row is aligned with the mean input of its own top-100 firings 12–13×
-  more than a random row (median 13.3 / 12.4; the LM gave 12–15×).
+* **Per-neuron centroid (`cos_win`): mostly selection.** A neuron's `W_in` row is aligned with the mean input of its
+  own top-100 firings 12–13× more than a random row (|cos| 0.58 / 0.45). Every top firing has a positive
+  pre-activation, though, so part of that is guaranteed. A random input direction aligns with its own top firings by
+  11.8× / 5.4× (|cos| 0.53 / 0.35). So the neuron-specific excess is small in stage2 and about 2× in stage3. In the LM
+  there was no excess at all (`locality_experiment_B.md` §3.2).
 * **A random input-space direction is no better than a dense hidden combination** (coherence 0.14 / 0.10, CLIP at
   baseline). In the LM, random input directions were clearly local (0.14–0.21, below neurons but well above dense
   whitened units). Here only the neurons and the sparse combinations stand out.
@@ -194,8 +197,9 @@ Medians, stage2.block8 / stage3.block2:
 
 ## 4. Summary in the paper's terms
 
-* **Per-neuron specialization** (a neuron's input weight is the centre of its own firing region): yes, 12–13× above
-  chance, the same as in the LM.
+* **Per-neuron specialization** (a neuron's input weight is the centre of its own firing region): not shown by
+  `cos_win`. Most of its 12–13× ratio is a selection effect (a random input direction gives 12× / 5×). Only the last
+  block shows a neuron-specific excess (about 2×).
 * **Weights as cluster centres of the data:** weakly. Gate rows beat their own rotations, the effect is learned, and
   they overtake covariance-matched random directions on variance reduction only with hundreds to thousands of
   centroids. At the last block the neuron partition is more class-informative than k-means.

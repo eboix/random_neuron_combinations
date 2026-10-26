@@ -57,7 +57,7 @@ gate nonlinearity or to learning.
 | `coh_excess` (primary) | mean pairwise cosine of the 100 inputs, minus the median for random sets of 100 uniform tokens (that median is ≈ 0.000 at every layer) | how tightly the strongest firings sit together. 0 = no more than random text |
 | `pr` (secondary) | participation ratio of the 100×100 Gram matrix's eigenvalues | effective dimensionality of the firing set. Random sets: 43 / 39 / 34 |
 | `k_star`, `sil` | spherical k-means for k = 2…6, best silhouette; `k_star` = 1 if best silhouette < 0.1 | number of modes (turned out not to be usable, §3.5) |
-| `cos_gate` (neurons) | \|cos(gate row, mean top-100 input)\| divided by the median of the same for 200 random gate rows | is the neuron's gate weight the centre of its own firing set? |
+| `cos_gate` (neurons) | \|cos(gate row, mean top-100 input)\| divided by the median of the same for 200 random gate rows | is the neuron's gate weight the centre of its own firing set? (only beyond the selection baseline from `xdir`, §3.2) |
 | `dom_share`, `dom_eff` (ksparse, related) | recompute each constituent neuron's contribution `a_i · p_i(x)` at each top firing. `dom_share` = share of the 100 firings whose largest contribution comes from the most common constituent; `dom_eff` = effective number of dominating constituents (exp entropy) | is a combination's top really a union of its constituents' regions, or one constituent's? |
 
 ### Analysis
@@ -138,11 +138,16 @@ firings come from the same constituent in every median unit. The union of region
 (2–2.5 constituents) and k = 100 (4–5). This explains why `ksparse_2` and `ksparse_5` behave like neurons in both
 locality and agent scores. As far as the top of the distribution is concerned, they *are* mostly neurons.
 
-**Per-neuron centroid (`cos_gate`).** A neuron's gate row is aligned with the mean input of its own top-100 firings
-**12–15× more than a random gate row** (median 14.6 / 12.4 / 12.6; minimum 5.6 across all 150 neurons). So the
-paper's picture holds **per neuron**: the gate weight points at the centre of the neuron's own firing region. Together
-with A, the picture is: each neuron's weight is the centroid of *its own* region, but those regions are not the
-dominant clusters of the input distribution.
+**Per-neuron centroid (`cos_gate`), corrected 2026-10-26.** A neuron's gate row is aligned with the mean input of
+its own top-100 firings 12–15× more than a random gate row (median 14.6 / 12.4 / 12.6; |cos| ≈ 0.25–0.32). **This
+is mostly a selection effect, not evidence for the paper.** The top firings are chosen by the neuron's activation,
+and every one of them has a positive gate pre-activation (100 % in the median neuron). So their mean input
+necessarily leans toward the gate row. The `xdir` control measures exactly that. Its top firings are chosen purely by
+the projection r·x, and its mean top input aligns with r by the same amount (|cos| 0.32 / 0.28 / 0.25, ratio
+16.6 / 13.6 / 13.4 vs neurons 14.8 / 12.7 / 12.8; recomputed with 500 reference rows). Neurons are no more aligned
+with their own firing set than any linear readout would be. (The up rows align less, |cos| ≈ 0.16–0.20.) The earlier
+version of this paragraph read the ratio as "the gate weight is the centre of the neuron's own region". Without a
+selection baseline that reading is not supported.
 
 ### 3.3 Does locality predict the agents' scores?
 
@@ -218,8 +223,9 @@ instead, and it behaves sensibly (§3.3).
 
 **What the mechanism explains.**
 
-* **Per-neuron specialization is real in Qwen3-0.6B.** Each neuron's gate weight is the centroid of its own firing
-  region (12–15× above chance), and neurons fire more locally than a random input direction.
+* **Neurons fire more locally than a random input direction** (coherence of their top inputs 0.21 / 0.19 / 0.33 vs
+  0.14 / 0.17 / 0.21). The alignment of a neuron's gate row with its own firing set (`cos_gate`) is *not* extra
+  evidence: a random direction aligns with its own top firings just as much (§3.2).
 * **Union of regions is real, but only at larger k.** Because neurons are heavy-tailed, small random combinations
   (k ≤ 5) inherit the top region of their strongest constituent and are as local as neurons. That matches the agent
   study, where `ksparse_2/5` were not clearly worse than neurons. At k ≈ 20 the top splits over 2–3 neurons; at
