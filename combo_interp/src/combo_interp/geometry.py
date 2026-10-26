@@ -10,6 +10,7 @@ the tensor fed to gate_proj) better than random directions do. Here each set of 
   rand_cov     N(0, cov(x))                                matches the anisotropy of the data (main null)
   rand_rot     W_gate rows @ a random rotation             keeps the neurons' norms and mutual angles, drops alignment with x
   combo_k      Gaussian mix of k unit gate rows            the x-space analogue of the ksparse_k units
+  rand_gcov    N(mean, cov) of the gate rows               keeps the gate rows' first and second moments, drops the rest
   data_pts     random tokens' x (fit half)                 data-aligned baseline (k-means++-style seeding)
   kmeans       spherical k-means on the fit half           upper bound
 
@@ -20,6 +21,8 @@ Two assignment rules (`assign` column):
   euclid  argmin_j ||x - c_j||^2 on raw centered x with raw-scale centroids: the same sampled sets at their native
           relative norms, each set scaled once so its mean norm equals the mean ||x|| (data_pts = raw tokens, no
           rescaling; kmeans = Euclidean Lloyd k-means). Only differences in centroid norm separate it from `cos`.
+  ip      argmax_j <c_j, x> on raw (centered unless center=False) x with rows at native norm: for weight rows, the
+          neuron with the largest pre-activation. Weight-like sets only; rand_iso / combo_k get gate-row norms.
 """
 from __future__ import annotations
 
@@ -27,7 +30,8 @@ import re
 
 import numpy as np
 
-SETS = ["gate", "up", "rand_iso", "rand_cov", "rand_rot", "data_pts", "kmeans"]
+SETS = ["gate", "up", "rand_iso", "rand_cov", "rand_rot", "data_pts", "kmeans"]   # + combo_k, rand_gcov
+IP_SETS = {"gate", "up", "rand_iso", "rand_rot", "rand_gcov"}                      # + combo_k
 
 
 # ----------------------------------------------------------------------------- capture (torch)
@@ -163,9 +167,13 @@ def assign(X, C, chunk=8192, return_max=False, bias=None):
     return (a, torch.cat(m)) if return_max else a
 
 
-def make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n):
-    """Raw-scale rows of one centroid set (kmeans: unit rows of spherical k-means)."""
+def make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats=None):
+    """Raw-scale rows of one centroid set (kmeans: unit rows of spherical k-means). gstats = (mean, cov_sqrt) of the
+    gate rows, for rand_gcov."""
     d = Wg.shape[1]
+    if name == "rand_gcov":
+        mu, s = gstats
+        return mu + rng.standard_normal((M, d)) @ s
     if name == "gate":
         return Wg[rng.choice(len(Wg), M, replace=False)]
     if name == "up":
@@ -213,15 +221,19 @@ def var_explained(X, a, M):
     return float(1 - ssw / sst)
 
 
-def partition_metrics(Xn, C, labels, rng, Xc=None, euclid=False):
-    """Xn (n,d) unit rows (torch); Xc (n,d) raw rows (torch) for `ve_raw` and the Euclidean rule.
+def partition_metrics(Xn, C, labels, rng, Xc=None, rule="cos"):
+    """Xn (n,d) unit rows (torch); Xc (n,d) raw rows (torch) for `ve_raw` and the euclid / ip rules.
     cos: C (M,d) unit rows, obj = mean max-cosine. euclid: C raw-scale rows, assignment by nearest centroid in Xc,
-    dist = mean squared distance to it / mean ||x - mean||^2. labels: {name: int array (n,), -1 = missing}."""
+    dist = mean squared distance to it / mean ||x - mean||^2. ip: C rows at native norm, assignment by the largest
+    inner product with Xc (for weight rows: the largest pre-activation). labels: {name: int array (n,), -1 = missing}."""
     import torch
-    if euclid:
+    if rule == "euclid":
         a, m = assign(Xc, C, return_max=True, bias=-0.5 * (C * C).sum(1))
         d2 = (Xc * Xc).sum(1) - 2 * m
         fit = {"obj": float("nan"), "dist": float(d2.mean() / ((Xc - Xc.mean(0)) ** 2).sum(1).mean())}
+    elif rule == "ip":
+        a = assign(Xc, C)
+        fit = {"obj": float("nan"), "dist": float("nan")}
     else:
         a, m = assign(Xn, C, return_max=True)
         fit = {"obj": float(m.mean()), "dist": float("nan")}
@@ -243,11 +255,18 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
                   assign_rules=("cos",)):
     """X (n,d) MLP inputs; fit_mask selects the fit half (eval = ~fit_mask). Returns a list of result rows.
     Wg = the neurons' input weights (gate rows; for a plain GELU MLP the first linear layer's rows). Wu = None
-    (no gated value branch) drops the `up` set. assign_rules: subset of ("cos", "euclid"); "euclid" reuses the
-    sets drawn for "cos" and has its own rng, so the cos rows do not depend on whether it runs."""
+    (no gated value branch) drops the `up` set. assign_rules: subset of ("cos", "euclid", "ip"); "euclid" and "ip"
+    reuse the sets drawn for "cos", and they and the rand_gcov set have their own rngs, so the other cos rows do not
+    depend on whether they run. ip covers the weight-like sets only (IP_SETS); rows without a native norm (rand_iso,
+    combo_k) get the norms of randomly drawn gate rows."""
     import torch
     rng = np.random.default_rng(seed)
     rng_e = np.random.default_rng(seed + 10_000)
+    rng_g = np.random.default_rng(seed + 20_000)
+    rng_i = np.random.default_rng(seed + 30_000)
+    w, V = np.linalg.eigh(np.cov(Wg, rowvar=False))
+    gstats = (Wg.mean(0), (V * np.sqrt(np.clip(w, 0, None))) @ V.T)
+    g_norms = np.linalg.norm(Wg, axis=1)
     X = X.astype(np.float32)
     if center:
         X = X - X[fit_mask].mean(0)
@@ -259,18 +278,26 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
     lab_ev = {k: v[~fit_mask] for k, v in labels.items()}
     w, V = np.linalg.eigh(np.cov(X[fit_mask], rowvar=False))
     cov_sqrt = (V * np.sqrt(np.clip(w, 0, None))) @ V.T
-    sets = [s for s in SETS if not (s == "up" and Wu is None)] + [f"combo_{k}" for k in combo_ks]
+    sets = [s for s in SETS if not (s == "up" and Wu is None)] + [f"combo_{k}" for k in combo_ks] + ["rand_gcov"]
     rows = []
     for M in Ms:
         for r in range(reps.get(M, 1) if isinstance(reps, dict) else reps):
             for name in sets:
                 if name in ("gate", "up") and M >= len(Wg) and r > 0:
                     continue        # the full weight set has no sampling variability
-                raw = make_set(name, M, rng, Wg, Wu, cov_sqrt, Xfit, Xfit_n)
+                srng = rng_g if name == "rand_gcov" else rng
+                raw = make_set(name, M, srng, Wg, Wu, cov_sqrt, Xfit, Xfit_n, gstats)
                 C = torch.from_numpy(unit_rows(raw).astype(np.float32))
                 if "cos" in assign_rules:
                     rows.append({"assign": "cos", "set": name, "M": M, "rep": r,
-                                 **partition_metrics(Xev, C, lab_ev, rng, Xc=Xev_raw)})
+                                 **partition_metrics(Xev, C, lab_ev, srng, Xc=Xev_raw)})
+                if "ip" in assign_rules and (name in IP_SETS or name.startswith("combo_")):
+                    Ci = raw
+                    if name == "rand_iso" or name.startswith("combo_"):
+                        Ci = unit_rows(raw) * rng_i.choice(g_norms, M)[:, None]
+                    Ci = torch.from_numpy(np.ascontiguousarray(Ci, dtype=np.float32))
+                    rows.append({"assign": "ip", "set": name, "M": M, "rep": r,
+                                 **partition_metrics(Xev, Ci, lab_ev, rng_i, Xc=Xev_raw, rule="ip")})
                 if "euclid" in assign_rules:
                     if name == "kmeans":
                         Ce = euclidean_kmeans(Xfit, M, rng_e)
@@ -280,6 +307,6 @@ def centroid_eval(X, Wg, Wu, labels, fit_mask, Ms, reps, combo_ks=(2, 5, 20), ce
                         Ce = raw * (x_norm / np.linalg.norm(raw, axis=1).mean())
                     Ce = torch.from_numpy(np.ascontiguousarray(Ce, dtype=np.float32))
                     rows.append({"assign": "euclid", "set": name, "M": M, "rep": r,
-                                 **partition_metrics(Xev, Ce, lab_ev, rng_e, Xc=Xev_raw, euclid=True)})
+                                 **partition_metrics(Xev, Ce, lab_ev, rng_e, Xc=Xev_raw, rule="euclid")})
             log(f"[geometry] M={M} rep={r} done")
     return rows

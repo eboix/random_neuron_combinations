@@ -63,6 +63,22 @@ def test_euclid_assignment():
                                                                 if r["assign"] == "cos" and r["set"] == "gate"]
 
 
+def test_ip_assignment():
+    need("torch")
+    from combo_interp.geometry import centroid_eval
+    X, y, mu, rng = _mixture()
+    norms = rng.uniform(0.5, 2.0, len(mu))[:, None]       # native norms vary; ip must still find the planted means
+    fit = rng.random(len(y)) < 0.5
+    rows = centroid_eval(X, mu * norms, rng.standard_normal(mu.shape), {"cluster": y}, fit, Ms=[16], reps=3,
+                         combo_ks=(5,), center=False, log=lambda *_: None, assign_rules=("cos", "ip"))
+    ip = [r for r in rows if r["assign"] == "ip"]
+    assert {r["set"] for r in ip} == {"gate", "up", "rand_iso", "rand_rot", "rand_gcov", "combo_5"}
+    med = {s: np.median([r["ve_raw"] for r in ip if r["set"] == s]) for s in {r["set"] for r in ip}}
+    for null in ["rand_iso", "rand_rot", "rand_gcov", "up", "combo_5"]:
+        assert med["gate"] > med[null] + 0.05, (null, med)
+    assert any(r["set"] == "rand_gcov" for r in rows if r["assign"] == "cos")
+
+
 def test_capture_inputs_match_gate():
     need("torch"); need("transformers")
     import torch

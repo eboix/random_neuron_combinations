@@ -8,6 +8,9 @@ METRICS = ["obj", "dist", "ve", "ve_raw", "nmi_doc", "nmi_token", "nmi_next", "e
 # reference palette, categorical slots 1-7 in fixed order (validated adjacent-pair order for line charts)
 PLOT_SETS = [("gate", "#2a78d6"), ("up", "#eb6834"), ("rand_cov", "#1baf7a"), ("rand_rot", "#eda100"),
              ("combo_5", "#e87ba4"), ("data_pts", "#008300"), ("kmeans", "#6250d6")]
+# ip has no data-derived sets: same slots, filled with its own nulls
+PLOT_SETS_IP = [("gate", "#2a78d6"), ("up", "#eb6834"), ("rand_gcov", "#1baf7a"), ("rand_rot", "#eda100"),
+                ("combo_5", "#e87ba4"), ("rand_iso", "#008300"), ("combo_20", "#6250d6")]
 KEYS = ["assign", "init", "layer", "M"]
 
 
@@ -42,7 +45,7 @@ def gate_vs_nulls(df: pd.DataFrame) -> pd.DataFrame:
             gate = d[d.set == "gate"][metric].median()
             if np.isnan(gate):
                 continue
-            for null in ["rand_cov", "rand_rot", "data_pts", "up", "combo_2", "combo_5", "combo_20"]:
+            for null in ["rand_cov", "rand_gcov", "rand_rot", "rand_iso", "data_pts", "up", "combo_2", "combo_5", "combo_20"]:
                 v = d[d.set == null][metric]
                 if len(v):
                     out.append({"assign": rule, "init": init, "layer": L, "M": M, "metric": metric, "null": null,
@@ -63,7 +66,7 @@ def plot(s: pd.DataFrame, metric: str, path, rule="cos"):
         for c, L in enumerate(layers):
             ax = axes[r, c]
             d = s[(s.init == init) & (s.layer == L)]
-            for name, col in PLOT_SETS:
+            for name, col in (PLOT_SETS_IP if rule == "ip" else PLOT_SETS):
                 e = d[d.set == name].sort_values("M")
                 if len(e):
                     ax.plot(e.M, e[metric], color=col, lw=2, marker="o", ms=4, label=name)
@@ -89,24 +92,26 @@ def write_report(df: pd.DataFrame, out_root, tag: str):
     s.to_csv(out_root / f"summary_{tag}.csv", index=False)
     gv = gate_vs_nulls(df)
     gv.to_csv(out_root / f"gate_vs_nulls_{tag}.csv", index=False)
-    rules = [r for r in ["cos", "euclid"] if r in set(s["assign"])]
+    rules = [r for r in ["cos", "euclid", "ip"] if r in set(s["assign"])]
     for rule in rules:
-        sfx = "" if rule == "cos" else "_euclid"
-        for m in (["obj", "obj_norm", "nmi_doc", "nmi_next", "ve", "ve_raw"] if rule == "cos"
-                  else ["dist", "nmi_doc", "nmi_next", "ve", "ve_raw"]):
+        sfx = "" if rule == "cos" else f"_{rule}"
+        for m in {"cos": ["obj", "obj_norm", "nmi_doc", "nmi_next", "ve", "ve_raw"],
+                  "euclid": ["dist", "nmi_doc", "nmi_next", "ve", "ve_raw"],
+                  "ip": ["nmi_doc", "nmi_next", "ve", "ve_raw", "eff_k"]}[rule]:
             if s[s["assign"] == rule][m].notna().any():
                 plot(s, m, out_root / f"{m}{sfx}_{tag}.png", rule)
     lines = [f"# Centroid test ({tag} MLP inputs)", "",
              "Assignment `cos` = argmax cosine with unit centroids; `euclid` = nearest raw-scale centroid in raw "
-             "(centered) x. `obj` = mean max-cosine of held-out tokens to the set (cos only); `obj_norm` = 0 at the "
+             "(centered) x; `ip` = largest inner product with rows at native norm (largest pre-activation). `obj` = mean max-cosine of held-out tokens to the set (cos only); `obj_norm` = 0 at the "
              "covariance-matched random null, 1 at spherical k-means; `dist` = mean squared distance to the nearest "
              "centroid / total variance (euclid only); `ve` / `ve_raw` = variance of the unit-normalized / raw x "
              "explained by the partition (1 - within-cluster SS / total SS); `nmi_*` = NMI of the partition with doc "
              "label / token / next token, minus the NMI of a size-matched random partition.", ""]
-    order = [p for p, _ in PLOT_SETS] + ["rand_iso", "combo_2", "combo_20"]
+    order = [p for p, _ in PLOT_SETS] + ["rand_iso", "rand_gcov", "combo_2", "combo_20"]
     for rule in rules:
-        vals = (["obj_norm", "ve", "ve_raw", "nmi_doc", "nmi_next"] if rule == "cos"
-                else ["dist", "ve", "ve_raw", "nmi_doc", "nmi_next"])
+        vals = {"cos": ["obj_norm", "ve", "ve_raw", "nmi_doc", "nmi_next"],
+                "euclid": ["dist", "ve", "ve_raw", "nmi_doc", "nmi_next"],
+                "ip": ["ve", "ve_raw", "eff_k", "nmi_doc", "nmi_next"]}[rule]
         for init in [i for i in ["trained", "random"] if i in set(s.init)]:
             for M in sorted(set(s.M)):
                 t = s[(s["assign"] == rule) & (s.init == init) & (s.M == M)].pivot_table(index="set", columns="layer",
