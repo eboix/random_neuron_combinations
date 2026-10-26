@@ -33,9 +33,9 @@ sub() {  # sub <stage> <cpu|gpu> <time> [dependency job ids...]
 # Cache stages requeue themselves at the limit, so theirs can be tight; the others restart from scratch.
 T() {
   case $1 in
-    corpus) echo 06:00:00 ;;  stats_units) echo 02:00:00 ;;  cache_train) echo 08:00:00 ;;
-    cache_holdout) echo 02:00:00 ;;  calibrate) echo 01:00:00 ;;  export) echo 03:00:00 ;;  centroids) echo 06:00:00 ;;
-    explain) echo 12:00:00 ;;  write|simulate) echo 06:00:00 ;;
+    corpus) echo 08:00:00 ;;  stats_units) echo 04:00:00 ;;  cache_train) echo 12:00:00 ;;
+    cache_holdout) echo 04:00:00 ;;  calibrate) echo 02:00:00 ;;  export) echo 05:00:00 ;;  centroids) echo 10:00:00 ;;
+    explain) echo 16:00:00 ;;  write|simulate) echo 08:00:00 ;;
   esac
 }
 
@@ -61,8 +61,8 @@ case "${1:?phase or stage}" in
   write|simulate) echo "$1=$(sub "$1" cpu $(T $1))" ;;
   test)   echo "test=$(sub test cpu 01:00:00)" ;;
   serve)  echo "serve=$(sub serve gpu 12:00:00)  (cancel with scancel when the explain stage is done)" ;;
-  probe)  echo "probe=$(sub probe gpu 03:00:00)" ;;
-  score)  echo "score=$(sub score cpu 01:00:00)" ;;
+  probe)  echo "probe=$(sub probe gpu 05:00:00)" ;;
+  score)  echo "score=$(sub score cpu 02:00:00)" ;;
   corpus|export) echo "$1=$(sub "$1" cpu $(T $1))" ;;
   stats_units|cache_train|cache_holdout|calibrate|centroids) echo "$1=$(sub "$1" gpu $(T $1))" ;;
   *) echo "unknown phase/stage $1"; exit 2 ;;
