@@ -16,12 +16,13 @@ cd "$(dirname "$0")/.."
 source slurm/env.sh
 
 # name  kind  time  ->  sbatch resources
-sub() {  # sub <stage> <cpu|gpu> <time> [dependency job ids...]
+sub() {  # sub <stage> <cpu|gpu|big> <time> [dependency job ids...]   (gpu / big: see env.sh)
   local stage=$1 kind=$2 time=$3; shift 3
   local dep=""; [ $# -gt 0 ] && dep="--dependency=afterok:$(IFS=:; echo "$*")"
   # no --mem: Betty's CLI filter derives memory from CPUs and rejects any other ratio
   local res="--partition=$CI_CPU_PARTITION --cpus-per-task=$CI_CPU_CPUS"
   [ "$kind" = gpu ] && res="--partition=$CI_GPU_PARTITION --gpus=$CI_GPUS --cpus-per-task=$((CI_GPU_CPUS * CI_GPUS))"
+  [ "$kind" = big ] && res="--partition=$CI_BIG_GPU_PARTITION --gpus=$CI_GPUS --cpus-per-task=$((CI_BIG_GPU_CPUS * CI_GPUS))"
   local acct=""; [ -n "$CI_ACCOUNT" ] && acct="--account=$CI_ACCOUNT"
   # cache stages checkpoint on USR1 (20 min before the limit) and requeue under the same job ID (slurm/job.sbatch)
   local rq=""; [[ "$stage" == cache_* ]] && rq="--signal=B:USR1@1200 --requeue --open-mode=append"
@@ -44,12 +45,12 @@ explain_kind() { [ "$(ci_query_enabled)" = 1 ] && echo gpu || echo cpu; }
 case "${1:?phase or stage}" in
   data)
     c=$(sub corpus cpu $(T corpus))
-    s=$(sub stats_units gpu $(T stats_units) "$c")
-    t=$(sub cache_train gpu $(T cache_train) "$s")
-    h=$(sub cache_holdout gpu $(T cache_holdout) "$s")
-    k=$(sub calibrate gpu $(T calibrate) "$s")
+    s=$(sub stats_units big $(T stats_units) "$c")
+    t=$(sub cache_train big $(T cache_train) "$s")
+    h=$(sub cache_holdout big $(T cache_holdout) "$s")
+    k=$(sub calibrate big $(T calibrate) "$s")
     e=$(sub export cpu $(T export) "$t" "$h" "$k")
-    g=$(sub centroids gpu $(T centroids) "$h")
+    g=$(sub centroids big $(T centroids) "$h")
     echo "submitted: corpus=$c stats_units=$s cache_train=$t cache_holdout=$h calibrate=$k export=$e centroids=$g"
     echo "logs: $CI_LOGS   watch: squeue -u \$USER" ;;
   agents)
@@ -61,9 +62,9 @@ case "${1:?phase or stage}" in
   write|simulate) echo "$1=$(sub "$1" cpu $(T $1))" ;;
   test)   echo "test=$(sub test cpu 01:00:00)" ;;
   serve)  echo "serve=$(sub serve gpu 12:00:00)  (cancel with scancel when the explain stage is done)" ;;
-  probe)  echo "probe=$(sub probe gpu 05:00:00)" ;;
+  probe)  echo "probe=$(sub probe big 05:00:00)" ;;
   score)  echo "score=$(sub score cpu 02:00:00)" ;;
   corpus|export) echo "$1=$(sub "$1" cpu $(T $1))" ;;
-  stats_units|cache_train|cache_holdout|calibrate|centroids) echo "$1=$(sub "$1" gpu $(T $1))" ;;
+  stats_units|cache_train|cache_holdout|calibrate|centroids) echo "$1=$(sub "$1" big $(T $1))" ;;
   *) echo "unknown phase/stage $1"; exit 2 ;;
 esac

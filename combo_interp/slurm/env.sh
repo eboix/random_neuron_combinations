@@ -18,9 +18,13 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CI_ACCOUNT=${CI_ACCOUNT:-}                       # empty = your default account (sacctmgr show assoc user=$USER)
 export CI_CPU_PARTITION=${CI_CPU_PARTITION:-genoa-std-mem}
 export CI_CPU_CPUS=${CI_CPU_CPUS:-8}                    # -> 8 x 5632 MB = 44 GB
-export CI_GPU_PARTITION=${CI_GPU_PARTITION:-b200-mig45} # 45 GB fits Qwen3-8B; dgx-b200 is ~4x the compute
+# Two GPU job kinds (slurm/submit.sh): "big" = compute-heavy stages (stats_units, cache_*, calibrate, centroids,
+# probe) on a full B200; "gpu" = jobs that mostly hold the model while idle (explain with queries, serve) on a slice.
+export CI_BIG_GPU_PARTITION=${CI_BIG_GPU_PARTITION:-dgx-b200}
+export CI_BIG_GPU_CPUS=${CI_BIG_GPU_CPUS:-28}           # CPUs per GPU required by the partition (table above)
+export CI_GPU_PARTITION=${CI_GPU_PARTITION:-b200-mig45} # 45 GB fits Qwen3-8B
+export CI_GPU_CPUS=${CI_GPU_CPUS:-6}
 export CI_GPUS=${CI_GPUS:-1}
-export CI_GPU_CPUS=${CI_GPU_CPUS:-6}                    # CPUs per GPU required by the partition (table above)
 export CI_CLAUDE=${CI_CLAUDE:-$HOME/.local/bin/claude}  # agent stages; sign-in token in ~/.claude_token (claude setup-token)
 export CI_MAX_REQUEUES=${CI_MAX_REQUEUES:-5}            # cache stages requeue themselves at the time limit, at most this often
 export CI_CONFIG=${CI_CONFIG:-configs/cluster_qwen3_8b.yaml}

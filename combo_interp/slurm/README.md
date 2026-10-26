@@ -18,9 +18,11 @@ curl -fsSL https://claude.ai/install.sh | bash             # agents: Claude Code
 claude setup-token                                         # save the printed token to ~/.claude_token, then:
 chmod 600 ~/.claude_token
 ```
-CPU stages go to `CI_CPU_PARTITION`, GPU stages to `CI_GPU_PARTITION` (default `b200-mig45`, 45 GB) with `--gpus=$CI_GPUS`.
+CPU stages go to `CI_CPU_PARTITION`. Compute-heavy GPU stages (stats_units, cache_*, calibrate, centroids, probe) go
+to `CI_BIG_GPU_PARTITION` (default `dgx-b200`, a full B200); jobs that mostly hold the model while idle (explain with
+queries, serve) go to `CI_GPU_PARTITION` (default `b200-mig45`, 45 GB).
 Betty's CLI filter derives memory from CPUs and fixes CPUs per GPU per partition, so the scripts never pass `--mem`;
-if you switch GPU partition, set `CI_GPU_CPUS` to match (table in `env.sh`).
+if you switch a GPU partition, set `CI_GPU_CPUS` / `CI_BIG_GPU_CPUS` to match (table in `env.sh`).
 
 ## Phases
 | # | where | command | what |
