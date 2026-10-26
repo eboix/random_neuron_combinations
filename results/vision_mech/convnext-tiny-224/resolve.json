@@ -1,0 +1,32 @@
+{
+ "stage2.block8": {
+  "top16_overlap_with_published": {
+   "real": 1.0,
+   "virt:all_mlp": 1.0,
+   "virt:blocks_mlp": 0.0,
+   "virt:blocks_all_sites": 0.0,
+   "virt_std:all_mlp": 1.0,
+   "virt_std:blocks_mlp": 0.0,
+   "virt_std:blocks_all_sites": 0.0
+  },
+  "chosen": {
+   "raw": "all_mlp",
+   "std": "all_mlp"
+  }
+ },
+ "stage3.block2": {
+  "top16_overlap_with_published": {
+   "real": 1.0,
+   "virt:all_mlp": 1.0,
+   "virt:blocks_mlp": 0.03125,
+   "virt:blocks_all_sites": 0.02734375,
+   "virt_std:all_mlp": 1.0,
+   "virt_std:blocks_mlp": 0.03515625,
+   "virt_std:blocks_all_sites": 0.029296875
+  },
+  "chosen": {
+   "raw": "all_mlp",
+   "std": "all_mlp"
+  }
+ }
+}
