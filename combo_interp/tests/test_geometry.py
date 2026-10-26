@@ -42,6 +42,27 @@ def test_planted_centroids_beat_nulls():
     assert nmi["kmeans"] > 0.5
 
 
+def test_euclid_assignment():
+    need("torch")
+    from combo_interp.geometry import centroid_eval
+    X, y, mu, rng = _mixture()
+    Wu = rng.standard_normal(mu.shape)
+    fit = rng.random(len(y)) < 0.5
+    kw = dict(Ms=[16], reps=3, combo_ks=(5,), center=False, log=lambda *_: None)
+    rows = centroid_eval(3 * X, mu, Wu, {"cluster": y}, fit, assign_rules=("cos", "euclid"), **kw)
+    eu = [r for r in rows if r["assign"] == "euclid"]
+    assert len(eu) == len(rows) // 2
+    med = {s: np.median([r["ve_raw"] for r in eu if r["set"] == s]) for s in {r["set"] for r in eu}}
+    dist = {s: np.median([r["dist"] for r in eu if r["set"] == s]) for s in med}
+    for null in ["rand_iso", "rand_cov", "rand_rot", "up", "combo_5"]:
+        assert med["gate"] > med[null] + 0.05, (null, med)
+    assert dist["kmeans"] < dist["rand_cov"]
+    # the cos rows are unchanged by also running euclid
+    cos_only = centroid_eval(3 * X, mu, Wu, {"cluster": y}, fit, **kw)
+    assert [r["obj"] for r in cos_only if r["set"] == "gate"] == [r["obj"] for r in rows
+                                                                if r["assign"] == "cos" and r["set"] == "gate"]
+
+
 def test_capture_inputs_match_gate():
     need("torch"); need("transformers")
     import torch

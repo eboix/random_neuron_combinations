@@ -93,6 +93,7 @@ geometry:                   # scripts/09_centroids.py: do W_gate rows partition 
   reps: {32: 10, 128: 10, 512: 5, 3072: 3}
   combo_ks: [2, 5, 20]
   center: true              # subtract the mean MLP input before cosine assignment (else one centroid wins everything)
+  assign: [cos, euclid]     # cos = argmax cosine (unit centroids); euclid = nearest raw-scale centroid in raw centered x
   random_init_seed: 0       # --init random: same architecture, untrained weights (does gating alone explain it?)
 
 locality:                   # scripts/10_locality.py: are each unit's top firings local in the MLP input space? (Experiment B)

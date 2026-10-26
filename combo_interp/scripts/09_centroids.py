@@ -86,7 +86,8 @@ for L in layers:
     Ms = sorted({min(int(m), Wg.shape[0]) for m in g.Ms})
     reps = {min(int(k), Wg.shape[0]): int(v) for k, v in dict(g.reps).items()}
     for r in centroid_eval(X, Wg, Wu, labels, fit, Ms, reps, combo_ks=list(g.combo_ks), center=bool(g.center),
-                           seed=int(cfg.seed) + L, log=lambda m, L=L: print(f"L{L} {m}", flush=True)):
+                           seed=int(cfg.seed) + L, log=lambda m, L=L: print(f"L{L} {m}", flush=True),
+                           assign_rules=tuple(g.assign)):
         rows.append({"init": args.init, "layer": L, **r})
 pd.DataFrame(rows).to_csv(out / f"centroids_{tag}.csv", index=False)
 print(json.dumps({"rows": len(rows), "out": str(out)}))

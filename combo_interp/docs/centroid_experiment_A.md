@@ -78,6 +78,11 @@ into a partition of the tokens, which is then scored:
   token is to some centroid.
 * **`obj_norm`** = (obj − obj[`rand_cov`]) / (obj[`kmeans`] − obj[`rand_cov`]). It is 0 at the covariance-matched
   random null and 1 at k-means, so negative means worse than random-with-the-data's-covariance.
+* **`ve`** and **`ve_raw`**: the share of variance explained by the partition, 1 − (within-cluster sum of squares /
+  total sum of squares), on the evaluation half. Each cluster's spread is measured around the mean of its own
+  evaluation tokens, not around the centroid, so this scores the partition itself, not how well the centroid sits
+  on it. `ve` uses the unit-normalized centered `x` (directions only), `ve_raw` the centered `x` at its own scale (so
+  tokens with large ‖x‖ count more). Added 2026-10-26 (§4.7); the cosine partitions are the same as before.
 * **`eff_k`**: effective number of clusters actually used, exp(entropy of cluster sizes). This detects degenerate
   partitions where one centroid absorbs everything.
 * **Label purity, `nmi_token` / `nmi_next` / `nmi_doc`**: normalized mutual information between the partition and
@@ -89,6 +94,16 @@ into a partition of the tokens, which is then scored:
   corpus does not store each document's source, and the corpus builder's mixing order cannot be replayed (it breaks
   ties by set-iteration order, which depends on Python's per-run hash seed). Label shares (tokens): en 35.2k,
   code 3.2k, es 2.2k, fr 2.0k, other 1.8k, de 1.6k, ja 1.6k, ru 1.6k, bn 1.0k.
+
+### Euclidean assignment (added 2026-10-26)
+
+A second assignment rule, `argmin_j ‖x − c_j‖²` on the centered `x`. With unit-norm centroids this gives *exactly*
+the cosine partition: ‖x − s·c‖² = ‖x‖² − 2s·c·x + s², so with equal norms the arg-min is the arg-max of c·x. The
+rule therefore only adds something if centroids keep **different norms**. We reuse the sets drawn for the cosine rule
+at their native relative norms (gate / up / rand_rot rows as they are, `combo_k` and Gaussian draws as drawn), scaled
+once per set so the mean centroid norm equals the mean ‖x‖. `data_pts` are the raw tokens (no rescaling), `kmeans` is
+Euclidean (Lloyd) k-means on the raw fit half. Extra metric `dist` = mean squared distance to the nearest centroid
+divided by the mean squared distance to the data mean. Results in §4.8.
 
 ### Controls
 
@@ -113,7 +128,7 @@ If neuron weights are learned cluster centroids as in the paper, then:
 |---|---|
 | 1. gate beats geometry-matched random sets | **Yes.** At every layer and M, and in every repetition |
 | 2. dilution with k | **Yes.** Monotone at every layer |
-| 3. gate sits on the dominant clusters | **No.** Gate rows are far worse than covariance-matched random directions and than random data points |
+| 3. gate sits on the dominant clusters | **No.** Gate rows are far worse than covariance-matched random directions and than random data points. On variance explained (§4.7) the full set of 3072 gate rows ties `rand_cov` but stays far below `data_pts` |
 | 4. gate > up | **Yes** on the objective (all 12 layer × M cells). **No** on label purity at large M, where `up` ties or wins |
 | 5. nothing in the random-init model | **Yes.** All weight-based sets are indistinguishable from random there |
 
@@ -232,6 +247,56 @@ centered and 230–440 for `rand_rot`. The gate set's `obj` still beats `rand_ro
 are meaningless (near-empty partitions). This variant is reported for completeness only. The centered analysis is the
 primary one, and that choice was made before any results were seen.
 
+### 4.7 Variance explained by the cosine partitions (added 2026-10-26)
+
+Max-cosine (`obj`) rewards a set for having *some* centroid close to each token. It does not ask whether the tokens
+sharing a centroid are close to *each other*, which is what "cluster" means. `ve` / `ve_raw` measure that directly.
+Trained model, same partitions as §4.1, median over repetitions, % of variance explained, L7 / L14 / L21:
+
+| M | metric | gate | up | combo_2 | combo_20 | rand_rot | rand_cov | data_pts | kmeans |
+|---|---|---|---|---|---|---|---|---|---|
+| 32 | `ve` | 6.3 / 9.4 / 11.4 | 3.3 / 5.6 / 6.6 | 5.5 / 7.5 / 10.4 | 5.2 / 7.2 / 9.4 | 5.8 / 6.8 / 8.8 | 14.7 / 15.7 / 19.1 | 17.2 / 19.1 / 22.9 | 21.7 / 23.7 / 28.4 |
+| 128 | `ve` | 11.7 / 14.3 / 19.8 | 7.9 / 9.0 / 12.6 | 9.5 / 12.4 / 17.1 | 8.6 / 11.6 / 15.3 | 9.4 / 10.8 / 13.3 | 18.1 / 20.2 / 24.4 | 22.9 / 25.2 / 31.3 | 28.1 / 30.0 / 36.5 |
+| 512 | `ve` | 17.9 / 20.9 / 27.1 | 13.0 / 15.9 / 19.7 | 16.2 / 18.9 / 23.6 | 14.0 / 16.9 / 21.8 | 13.4 / 15.6 / 19.5 | 22.0 / 24.6 / 29.4 | 30.7 / 31.9 / 39.6 | 35.6 / 35.9 / 44.0 |
+| 3072 | `ve` | 31.7 / 32.0 / 37.3 | 25.8 / 25.9 / 31.1 | 27.7 / 27.8 / 34.2 | 27.4 / 29.0 / 34.3 | 26.6 / 27.7 / 32.8 | 29.1 / 32.0 / 37.1 | 46.8 / 45.5 / 54.1 | 48.4 / 46.2 / 55.3 |
+| 3072 | `ve_raw` | 32.1 / 32.5 / 38.0 | 26.1 / 26.2 / 31.8 | 28.3 / 28.1 / 35.0 | 27.7 / 29.4 / 34.8 | 26.8 / 28.0 / 33.5 | 29.0 / 32.1 / 37.6 | 47.1 / 46.1 / 55.0 | 48.7 / 46.8 / 56.2 |
+
+* `ve_raw` is within ~1 point of `ve` everywhere (all cells in the CSV), so weighting tokens by their norm changes
+  nothing.
+* Predictions 1, 2 and 4 survive. Every gate repetition beats every `rand_rot` repetition in 11 of 12 cells (both
+  metrics). `gate` > `up` in all 12. The full dilution order gate > combo_2 > combo_5 > combo_20 holds in 8 / 12 cells
+  for `ve` (9 / 12 for `ve_raw`); gate > combo_2 holds in every cell, the misorderings are among the combos.
+* **Prediction 3 is less clear-cut than on `obj`.** At M ≤ 512 gate rows are still well below `rand_cov`. With all
+  3072 rows they tie it (31.7 vs 29.1, 32.0 vs 32.0, 37.3 vs 37.1), while `obj_norm` put them far below. They never
+  approach `data_pts` or `kmeans`, so the conclusion that gate rows are not centres of the data's main clusters stands.
+* Random-init model: all weight-based sets are within noise of each other and of `rand_iso` on both metrics, as in §4.2.
+
+![ve_raw vs M](figures/geometry/ve_raw_centered.png)
+
+### 4.8 Euclidean assignment with raw-scale centroids (added 2026-10-26)
+
+`ve_raw` (%) under the Euclidean rule (§2), trained model, L7 / L14 / L21:
+
+| M | gate | up | combo_2 | combo_20 | rand_rot | rand_iso | rand_cov | data_pts | kmeans |
+|---|---|---|---|---|---|---|---|---|---|
+| 32 | 0.5 / 2.1 / 2.4 | 0.2 / 1.6 / 0.9 | 0.2 / 0.6 / 0.7 | 0.6 / 1.1 / 2.2 | 0.6 / 0.6 / 2.4 | 4.5 / 5.4 / 7.3 | 14.6 / 15.6 / 19.7 | 16.0 / 18.2 / 23.4 | 22.0 / 24.3 / 30.0 |
+| 3072 | 1.2 / 1.4 / 10.0 | 4.7 / 6.4 / 8.6 | 8.0 / 10.5 / 14.2 | 0.5 / 3.1 / 7.0 | 0.0 / 3.4 / 7.1 | 17.6 / 19.0 / 23.1 | 30.1 / 32.9 / 38.9 | 45.2 / 44.8 / 54.4 | 46.6 / 44.8 / 55.5 |
+
+**The weight-based partitions collapse.** At M = 3072 the gate and `rand_rot` partitions use 1–10 effective clusters
+(cosine rule: ~500–1900). The cause is the norm term. Nearest centroid = argmax c·x − ‖c‖²/2, and once the centroids
+are scaled to the data's norm the spread of ‖c‖²/2 across gate rows (sd ≈ 150 / 245 / 730 at L7 / L14 / L21) is
+10–20× larger than a typical |c·x| (≈ 18 / 12 / 57), because the cosines are only ~0.1. So the partition simply
+ranks rows by norm: the 10 shortest gate rows take 100 % / 99 % / 86 % of the tokens. The same happens to `up`,
+`rand_rot` and `combo_k`, and to the random-init model's `combo_k` sets, whose norms vary a lot. `rand_iso` and
+`rand_cov`, whose norms vary less, degrade less. The data-derived sets are unaffected because their norms are the
+data's own.
+
+So this rule does not test alignment; it tests the distribution of weight norms, and the differences between sets in
+the table are artifacts of that. The comparison between weight sets is only meaningful with equal norms, and then it
+is identical to the cosine rule in §4.1 and §4.7. (A smaller global scale moves the rule towards argmax c·x with
+native norms, i.e. "which neuron has the largest gate pre-activation", a different and arguably more neuron-like
+rule that we have not run.)
+
 ## 5. Interpretation
 
 **What Experiment A supports.**
@@ -270,7 +335,8 @@ predicts, and statistically mediates, the agent and pilot metrics.
   as min / max over 3–10 repetitions, with no confidence intervals or multiple-comparison correction. The
   `gate > rand_rot` result is unanimous across repetitions, so it is unlikely to be noise. Smaller differences
   (e.g. gate vs up on purity) should be treated as tentative.
-* Cosine-argmax is one of several ways to turn directions into a partition. A gate is really a half-space test
+* Cosine-argmax is one of several ways to turn directions into a partition. Euclidean nearest-centroid with the
+  weights' native norms is dominated by those norms (§4.8), so it is not a usable alternative. A gate is really a half-space test
   (`w·x > 0`) and a neuron can be active in many tokens at once, so a winner-take-all assignment understates overlap.
 * The document labels come from a heuristic, and English web / edu / Wikipedia are merged.
 * The covariance-matched null `rand_cov` is strong by construction on this objective (it is close to the top principal
@@ -281,7 +347,7 @@ predicts, and statistically mediates, the agent and pilot metrics.
 
 ```bash
 cd combo_interp
-python scripts/09_centroids.py --config configs/local_small_study.yaml --init trained     # capture + evaluate (~10 min CPU)
+python scripts/09_centroids.py --config configs/local_small_study.yaml --init trained     # capture + evaluate (~6 min on an M1 Pro, both rules)
 python scripts/09_centroids.py --config configs/local_small_study.yaml --init random
 python scripts/09_centroids.py --config configs/local_small_study.yaml --init trained --set geometry.center=false
 python scripts/09_centroids.py --config configs/local_small_study.yaml --report
