@@ -197,12 +197,13 @@ def build_unit_data(col, blind, layer, s, ref, ref_other, big, prof, uacts, ugid
     return data
 
 
-def render_view_md(d):
+def render_view_md(d, long_contexts=True):
     lines = [f"# Unit {d['blind_id']}  (layer {d['layer']})",
              f"Primary pole: **{d['primary_pole']}** (the direction with the strongest corpus firings; explain THIS pole).", "",
              "Marker legend: `[[tok|f]]` = the token this example was selected for; `«tok|f»` = other tokens in the window "
              "that also fire (f = fraction of the unit's corpus maximum on this pole, so 1.00 = strongest ever seen). "
-             "`↵` = newline. Windows are short; `long_contexts.md` has longer context for the strongest examples.", ""]
+             "`↵` = newline." + (" Windows are short; `long_contexts.md` has longer context for the strongest examples."
+                                 if long_contexts else ""), ""]
     lines += ["## Strongest firings, primary pole (one per document)"]
     for e in d["examples"]["primary"]:
         lines.append(f"{e['i']:>2}. [{e['frac']:.2f}] {e['text']}")
@@ -272,7 +273,7 @@ def build_agent_cache(cfg, paths, tok, log=print):
             # sparsity statistics separate neurons from Gaussian-like combos: private, not shown to agents
             hidden = {"n_distinct_docs_top100": data.pop("n_distinct_docs_top100"), **data.pop("rarity")}
             write_json(out_dir / f"{blind}.json", data)
-            (out_dir / f"{blind}.md").write_text(render_view_md(data))
+            (out_dir / f"{blind}.md").write_text(render_view_md(data, bool(E.get("long_contexts", True))))
             # holdout items for the simulation score
             pole = "pos" if s > 0 else "neg"
             hv, hg = hbig[f"{pole}_vals"][col], hbig[f"{pole}_gid"][col]

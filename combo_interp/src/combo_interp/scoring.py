@@ -149,7 +149,7 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
             a = r["max_act"] if R["primary"] > 0 else (None if r["min_act"] is None else -r["min_act"])
             by_unit[b][kind].append(np.nan if a is None else a / R["ref"])
             hits[b][kind].append(np.nan if a is None else float(hit(b, a, r["n_tokens"])))
-    rows = []
+    rows, sim_items = [], []
     for p in sorted(paths.agent_results("explain").glob("u*.json")):
         b = p.stem
         ex = read_json(p)
@@ -174,6 +174,10 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
         if sp.exists() and b in truth:
             sc = read_json(sp)["scores"]
             row.update(simulation_metrics([sc[str(i)] for i in range(len(truth[b]))], truth[b], groups.get(b)))
+            g = groups.get(b) or [None] * len(truth[b])
+            for i, t in enumerate(truth[b]):
+                sim_items.append({"blind_id": b, "unit_id": R["unit_id"], "layer": R["layer"], "cond": R["cond"],
+                                  "item": i, "group": g[i], "true_frac": t, "rating": sc[str(i)]})
         else:
             row["sim_spearman"] = np.nan
         rows.append(row)
@@ -182,5 +186,7 @@ def compute_scores(cfg, paths, probe_files, log=print) -> pd.DataFrame:
     out = paths.scores / threshold_label(cfg)
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / "unit_scores.csv", index=False)
-    log(f"[scores] {len(df)} units -> {out / 'unit_scores.csv'}")
+    # one row per simulator item: group = 'top' (max-activating) or 'random' (typical), never shown to the simulator
+    pd.DataFrame(sim_items).to_csv(out / "sim_items.csv", index=False)
+    log(f"[scores] {len(df)} units -> {out / 'unit_scores.csv'} (+ sim_items.csv)")
     return df

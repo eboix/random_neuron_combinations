@@ -78,6 +78,10 @@ def test_full_downstream():
                   "sim_rating_top", "sim_rating_random", "rate_null", "rate_rand", "n_parts", "n_queries"):
             assert c in df.columns, c
         assert df.sim_auc.between(0, 1).all() and abs(df.sim_auc.mean() - 0.5) < 0.15   # fake simulator rates at random
+        si = pd.read_csv(paths.scores / "corpus_frac_0.3" / "sim_items.csv")          # per-item record with groups
+        assert len(si) == sum(len(truth[b]) for b in sel) and set(si.group) == {"top", "random"}
+        b0 = si.blind_id.iloc[0]
+        assert si[si.blind_id == b0].group.tolist() == groups[b0]
         neu = df[df.cond == "neuron"]
         assert neu.rate_pred.mean() > neu.rate_rand.mean() + 0.2, "fake explainer should beat random text on neurons"
         assert neu.margin.mean() > 0.2
@@ -105,6 +109,21 @@ def test_full_downstream():
         assert len(summarize_pilot(pdf, n_boot=50)) > 0
         print("pilot median token entropy by condition:", {k: round(v, 3) for k, v in med.items()})
         print("fake-explainer margin by condition:", df.groupby("cond").margin.mean().round(2).to_dict())
+
+
+def test_explainer_without_long_contexts():
+    """export.long_contexts=false (the pilot's setup): no long_contexts.md, and neither TASK.md nor view.md mention it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, paths, model, tok = build_world(tmp)
+        cfg, paths = smoke_cfg(tmp, ["export.long_contexts=false"])
+        build_agent_cache(cfg, paths, tok, log=lambda *_: None)
+        b = read_json(paths.agent_cache / "selection.json")[0]
+        run_stage(cfg, paths, "explain", only=[b], dry_run=True, log=lambda *_: None)
+        work = paths.agent_work("explain") / b
+        assert sorted(p.name for p in work.iterdir()) == ["TASK.md", "data.json", "view.md"]
+        for f in ("TASK.md", "view.md"):
+            assert "long_contexts" not in (work / f).read_text(), f
+        assert "`data.json` holds the same data as view.md. Work only by reading" in (work / "TASK.md").read_text()
 
 
 def test_claude_backend_denies_private_data_and_repo():

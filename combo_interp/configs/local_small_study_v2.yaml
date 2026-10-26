@@ -1,0 +1,12 @@
+# Re-run of the small agent study (the pilot, qwen3_0.6b_small_v1) with the fixes since then: negative-pole sign,
+# per-unit calibrated thresholds, simulator items recorded as top/random. Same model, corpus, units, caches and
+# selected units as the pilot (data stages reused), same explainer inputs (view.md + data.json, no long_contexts.md,
+# no model queries). One design change: the explainer only explains; the writer (explanation only) writes all test texts.
+base: local_small_study.yaml
+experiment: qwen3_0.6b_small_v2
+paths:
+  data_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v2/data
+  private_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v2/private
+  jobs_dir: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v2/jobs
+  agent_work_root: /Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v2/agent_work
+export: {long_contexts: false}

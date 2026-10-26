@@ -93,6 +93,7 @@ export:                     # what agents see
   long_before: 384
   long_after: 32
   long_n: 12
+  long_contexts: true       # give the explainer long_contexts.md (false = view.md + data.json only, as in the pilot)
   tier_n: 6
   tier_edges: [0.5, 0.3, 0.1]   # strong >= .5 of max, moderate >= .3, weak >= .1
   random_n: 8

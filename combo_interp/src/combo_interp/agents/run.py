@@ -55,8 +55,12 @@ def _prepare(stage, blind, paths, cfg=None):
     if stage == "explain":
         shutil.copy(paths.agent_cache / f"{blind}.json", work / "data.json")
         shutil.copy(paths.agent_cache / f"{blind}.md", work / "view.md")
-        (work / "long_contexts.md").write_text(render_long_contexts(read_json(work / "data.json")))
         task = prompts.EXPLAIN
+        if cfg is None or cfg.export.get("long_contexts", True):
+            (work / "long_contexts.md").write_text(render_long_contexts(read_json(work / "data.json")))
+        else:
+            assert prompts.EXPLAIN_FILES_LONG in task
+            task = task.replace(prompts.EXPLAIN_FILES_LONG, prompts.EXPLAIN_FILES_SHORT)
         q = _query_cfg(cfg)
         if q:
             (work / "queries").mkdir()

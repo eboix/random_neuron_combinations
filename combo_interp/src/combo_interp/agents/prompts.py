@@ -43,6 +43,11 @@ Write `result.json` (valid JSON, exactly these keys):
 Then stop.
 """
 
+# export.long_contexts = false: the explainer gets view.md and data.json only (the pilot's setup)
+EXPLAIN_FILES_LONG = """`long_contexts.md` shows several hundred tokens of
+context before the strongest firings, and `data.json` holds the same data as view.md."""
+EXPLAIN_FILES_SHORT = "`data.json` holds the same data as view.md."
+
 QUERY_ADDENDUM = """
 ## Testing hypotheses on the model (before writing result.json)
 You can run your own texts through the model and see this unit's activation on every token. To do so, write a file
