@@ -2,8 +2,9 @@
 
 *facebook/convnext-tiny-224, blocks stage2.block8 (14×14×1536) and stage3.block2 (7×7×3072), the two blocks with
 published CLIP coherence results. Run 2026-10-26 on a Mac (MPS). Code: `scripts/vision_mech.py`. Results:
-`results/vision_mech/convnext-tiny-224/` (`centroids/`, `locality/`, `resolve.json`, `clip_*.json`). The language-model
-versions are `centroid_experiment_A.md` and `locality_experiment_B.md`; this document only describes what differs.*
+`results/vision_mech/convnext-tiny-224/` (`centroids/`, `centroids_cos_ip/`, `locality/`, `resolve.json`, `clip_*.json`). The language-model
+versions are `experiment_A_centroids_qwen.md` and `experiment_B_locality_qwen.md`; this document only describes what
+differs.*
 
 ## 1. Setup and what had to change
 
@@ -168,7 +169,7 @@ Medians, stage2.block8 / stage3.block2:
   own top-100 firings 12–13× more than a random row (|cos| 0.58 / 0.45). Every top firing has a positive
   pre-activation, though, so part of that is guaranteed. A random input direction aligns with its own top firings by
   11.8× / 5.4× (|cos| 0.53 / 0.35). So the neuron-specific excess is small in stage2 and about 2× in stage3. In the LM
-  there was no excess at all (`locality_experiment_B.md` §3.2).
+  there was no excess at all (`experiment_B_locality_qwen.md` §3.2).
 * **A random input-space direction is no better than a dense hidden combination** (coherence 0.14 / 0.10, CLIP at
   baseline). In the LM, random input directions were clearly local (0.14–0.21, below neurons but well above dense
   whitened units). Here only the neurons and the sparse combinations stand out.

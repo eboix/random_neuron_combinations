@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Experiments A and B of combo_interp (docs/centroid_experiment_A.md, docs/locality_experiment_B.md) on the
+"""Experiments A and B (docs/experiment_A_centroids_qwen.md, docs/experiment_B_locality_qwen.md) on the
 vision models of this repo: do neuron input weights act as centroids of the MLP input (A), and are a unit's top
 images local in MLP-input space, and does that explain the CLIP coherence / class purity gap (B)?
 
@@ -569,7 +569,7 @@ def stage_clip(a, M):
 
 def stage_locality(a, M):
     import pandas as pd
-    from combo_interp.locality import _unit, design, mediation, ols, set_metrics, within_cond_spearman
+    from combo_interp.locality import _unit, set_metrics
     rng = np.random.default_rng(a.seed + 2024)
     rows, base_rows, valid = [], [], []
     model = load_model(a.model)

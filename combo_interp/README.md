@@ -145,8 +145,11 @@ src/combo_interp/
   probe.py      GPU text scoring                            export.py    blinded views + ground truth
   pilot.py      agent-free metrics                          scoring.py   probe jobs + per-unit scores
   analyze.py    equivalence statistics, plots               interventions.py
+  geometry.py   Experiment A: weights as centroids          geometry_report.py   its tables / plots
+  locality.py   Experiment B: top-firing locality, mediation
   agents/       prompts, validation, runner, query_server.py (model queries) + relay.py (file-based access for agents)
 scripts/        00..08 stage CLIs, make_job.py              jobs/pending|done   handoff folders
+                09_centroids.py, 10_locality.py: follow-up Experiments A and B (writeups in ../docs/)
 tests/          numpy tests, synthetic pipeline, torch tiny-model verification
 docs/PROTOCOL.md   the manual cluster handoff            CLAUDE.md   rules for an agent working in this repo
 ```

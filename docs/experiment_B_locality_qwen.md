@@ -1,8 +1,8 @@
 # Experiment B — are a unit's strongest firings local in input space, and does that explain the agents' scores?
 
 *Qwen3-0.6B, layers 7 / 14 / 21, train split of `qwen3_0.6b_small_v1` (the data the agents saw). Run 2026-10-26.
-Code: `src/combo_interp/locality.py`, `scripts/10_locality.py`; outputs in
-`/Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/data/results/locality/`. Companion to `centroid_experiment_A.md`.*
+Code: `combo_interp/src/combo_interp/locality.py`, `combo_interp/scripts/10_locality.py`; outputs in
+`/Users/rohanbuluswar/combo_runs/qwen3_0.6b_small_v1/data/results/locality/`. Companion to `experiment_A_centroids_qwen.md`; the vision version is `vision_convnext_tiny.md`.*
 
 ## 1. Question
 
@@ -103,7 +103,7 @@ Median `coh_excess` (mean pairwise cosine of the top-100 inputs; random text = 0
 | dense_white | 0.07 | 0.09 | 0.07 |
 | xdir (random input direction) | 0.14 | 0.17 | 0.21 |
 
-![coherence by condition](figures/geometry/coh_by_cond.png)
+![coherence by condition](figures/qwen/coh_by_cond.png)
 
 * **Every condition is far more local than random text.** The top firings of *any* unit share a lot of input
   structure (coherence 0.07–0.39 against ≈ 0 for random tokens).
@@ -276,7 +276,8 @@ python scripts/10_locality.py --config configs/local_small_study.yaml           
 python scripts/10_locality.py --config configs/local_small_study.yaml --analyze   # analysis only, from unit_locality.csv
 ```
 
-Settings live in the `locality:` block of `configs/default.yaml`. Tests are in `tests/test_locality.py`:
+Settings live in the `locality:` block of `combo_interp/configs/default.yaml`. Tests are in
+`combo_interp/tests/test_locality.py`:
 - coherence and participation ratio match brute force;
 - planted 3-mode / 1-mode / random sets give the right ordering;
 - mediation recovers full attenuation when y depends on the condition only through the mediator;

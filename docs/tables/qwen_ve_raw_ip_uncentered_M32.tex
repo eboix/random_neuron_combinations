@@ -1,0 +1,167 @@
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.047 \pm 0.007$ & $0.053 \pm 0.022$ & $0.075 \pm 0.040$ & $0.058 \pm 0.016$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.043 \pm 0.008$ & $0.055 \pm 0.006$ & $0.075 \pm 0.011$ & $0.058 \pm 0.004$ \\
+\texttt{rand\_gcov} & $0.034 \pm 0.007$ & $0.036 \pm 0.010$ & $0.058 \pm 0.017$ & $0.043 \pm 0.008$ \\
+\texttt{rand\_iso} & $0.040 \pm 0.007$ & $0.050 \pm 0.010$ & $0.073 \pm 0.010$ & $0.054 \pm 0.005$ \\
+\addlinespace
+\texttt{combo\_2} & $0.022 \pm 0.012$ & $0.035 \pm 0.019$ & $0.053 \pm 0.019$ & $0.037 \pm 0.014$ \\
+\texttt{combo\_5} & $0.028 \pm 0.009$ & $0.025 \pm 0.015$ & $0.051 \pm 0.021$ & $0.035 \pm 0.012$ \\
+\texttt{combo\_20} & $0.025 \pm 0.007$ & $0.038 \pm 0.009$ & $0.040 \pm 0.018$ & $0.034 \pm 0.006$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 32$ centroids, uncentered inputs (the network's own gate pre-activations), Qwen3-0.6B. Mean $\pm$ standard deviation over 10 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-raw-M32}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.091 \pm 0.012$ & $0.083 \pm 0.029$ & $0.108 \pm 0.023$ & $0.094 \pm 0.011$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.065 \pm 0.006$ & $0.072 \pm 0.008$ & $0.100 \pm 0.012$ & $0.079 \pm 0.003$ \\
+\texttt{rand\_gcov} & $0.058 \pm 0.006$ & $0.065 \pm 0.012$ & $0.085 \pm 0.014$ & $0.069 \pm 0.007$ \\
+\texttt{rand\_iso} & $0.060 \pm 0.007$ & $0.065 \pm 0.008$ & $0.104 \pm 0.004$ & $0.076 \pm 0.003$ \\
+\addlinespace
+\texttt{combo\_2} & $0.039 \pm 0.009$ & $0.033 \pm 0.026$ & $0.052 \pm 0.027$ & $0.041 \pm 0.016$ \\
+\texttt{combo\_5} & $0.035 \pm 0.012$ & $0.024 \pm 0.016$ & $0.076 \pm 0.027$ & $0.045 \pm 0.011$ \\
+\texttt{combo\_20} & $0.035 \pm 0.014$ & $0.045 \pm 0.020$ & $0.063 \pm 0.008$ & $0.048 \pm 0.009$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 128$ centroids, uncentered inputs (the network's own gate pre-activations), Qwen3-0.6B. Mean $\pm$ standard deviation over 10 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-raw-M128}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.152 \pm 0.009$ & $0.124 \pm 0.028$ & $0.183 \pm 0.028$ & $0.153 \pm 0.014$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.093 \pm 0.008$ & $0.092 \pm 0.009$ & $0.127 \pm 0.019$ & $0.104 \pm 0.005$ \\
+\texttt{rand\_gcov} & $0.079 \pm 0.009$ & $0.091 \pm 0.005$ & $0.121 \pm 0.004$ & $0.097 \pm 0.005$ \\
+\texttt{rand\_iso} & $0.089 \pm 0.006$ & $0.083 \pm 0.005$ & $0.126 \pm 0.013$ & $0.100 \pm 0.004$ \\
+\addlinespace
+\texttt{combo\_2} & $0.031 \pm 0.023$ & $0.032 \pm 0.024$ & $0.054 \pm 0.030$ & $0.039 \pm 0.015$ \\
+\texttt{combo\_5} & $0.051 \pm 0.011$ & $0.053 \pm 0.012$ & $0.102 \pm 0.021$ & $0.069 \pm 0.005$ \\
+\texttt{combo\_20} & $0.046 \pm 0.008$ & $0.041 \pm 0.010$ & $0.058 \pm 0.031$ & $0.048 \pm 0.012$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 512$ centroids, uncentered inputs (the network's own gate pre-activations), Qwen3-0.6B. Mean $\pm$ standard deviation over 5 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-raw-M512}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.257$ & $0.209$ & $0.271$ & $0.246$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.128 \pm 0.002$ & $0.108 \pm 0.004$ & $0.173 \pm 0.008$ & $0.136 \pm 0.003$ \\
+\texttt{rand\_gcov} & $0.118 \pm 0.005$ & $0.116 \pm 0.011$ & $0.151 \pm 0.011$ & $0.128 \pm 0.009$ \\
+\texttt{rand\_iso} & $0.117 \pm 0.012$ & $0.119 \pm 0.003$ & $0.167 \pm 0.020$ & $0.134 \pm 0.003$ \\
+\addlinespace
+\texttt{combo\_2} & $0.037 \pm 0.023$ & $0.020 \pm 0.016$ & $0.061 \pm 0.018$ & $0.039 \pm 0.006$ \\
+\texttt{combo\_5} & $0.060 \pm 0.018$ & $0.033 \pm 0.023$ & $0.091 \pm 0.026$ & $0.062 \pm 0.008$ \\
+\texttt{combo\_20} & $0.054 \pm 0.018$ & $0.056 \pm 0.025$ & $0.111 \pm 0.018$ & $0.073 \pm 0.008$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 3072$ centroids, uncentered inputs (the network's own gate pre-activations), Qwen3-0.6B. Mean $\pm$ standard deviation over 3 redraws of each centroid set; the full gate set ($M = 3072$) is a single fixed set. All = mean over the three layers.}
+\label{tab:ve-raw-ip-raw-M3072}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.060 \pm 0.008$ & $0.086 \pm 0.008$ & $0.118 \pm 0.018$ & $0.088 \pm 0.006$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.055 \pm 0.007$ & $0.060 \pm 0.005$ & $0.085 \pm 0.011$ & $0.067 \pm 0.005$ \\
+\texttt{rand\_gcov} & $0.050 \pm 0.006$ & $0.067 \pm 0.008$ & $0.089 \pm 0.008$ & $0.069 \pm 0.005$ \\
+\texttt{rand\_iso} & $0.056 \pm 0.005$ & $0.061 \pm 0.008$ & $0.083 \pm 0.003$ & $0.067 \pm 0.004$ \\
+\addlinespace
+\texttt{combo\_2} & $0.053 \pm 0.010$ & $0.073 \pm 0.013$ & $0.106 \pm 0.014$ & $0.077 \pm 0.005$ \\
+\texttt{combo\_5} & $0.051 \pm 0.007$ & $0.066 \pm 0.007$ & $0.098 \pm 0.014$ & $0.072 \pm 0.006$ \\
+\texttt{combo\_20} & $0.051 \pm 0.006$ & $0.064 \pm 0.009$ & $0.091 \pm 0.007$ & $0.069 \pm 0.005$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 32$ centroids, centered inputs (each neuron's response to the mean input removed), Qwen3-0.6B. Mean $\pm$ standard deviation over 10 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-centered-M32}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.104 \pm 0.006$ & $0.122 \pm 0.014$ & $0.193 \pm 0.011$ & $0.140 \pm 0.005$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.084 \pm 0.005$ & $0.087 \pm 0.005$ & $0.117 \pm 0.009$ & $0.096 \pm 0.003$ \\
+\texttt{rand\_gcov} & $0.081 \pm 0.004$ & $0.109 \pm 0.005$ & $0.139 \pm 0.005$ & $0.110 \pm 0.002$ \\
+\texttt{rand\_iso} & $0.079 \pm 0.005$ & $0.085 \pm 0.007$ & $0.121 \pm 0.005$ & $0.095 \pm 0.004$ \\
+\addlinespace
+\texttt{combo\_2} & $0.084 \pm 0.006$ & $0.102 \pm 0.006$ & $0.160 \pm 0.010$ & $0.115 \pm 0.005$ \\
+\texttt{combo\_5} & $0.086 \pm 0.008$ & $0.101 \pm 0.008$ & $0.148 \pm 0.014$ & $0.112 \pm 0.006$ \\
+\texttt{combo\_20} & $0.075 \pm 0.006$ & $0.093 \pm 0.007$ & $0.137 \pm 0.012$ & $0.102 \pm 0.005$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 128$ centroids, centered inputs (each neuron's response to the mean input removed), Qwen3-0.6B. Mean $\pm$ standard deviation over 10 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-centered-M128}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.162 \pm 0.006$ & $0.177 \pm 0.005$ & $0.258 \pm 0.004$ & $0.199 \pm 0.002$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.115 \pm 0.005$ & $0.113 \pm 0.002$ & $0.164 \pm 0.007$ & $0.131 \pm 0.004$ \\
+\texttt{rand\_gcov} & $0.124 \pm 0.002$ & $0.158 \pm 0.002$ & $0.200 \pm 0.003$ & $0.161 \pm 0.001$ \\
+\texttt{rand\_iso} & $0.114 \pm 0.005$ & $0.108 \pm 0.004$ & $0.156 \pm 0.005$ & $0.126 \pm 0.001$ \\
+\addlinespace
+\texttt{combo\_2} & $0.139 \pm 0.004$ & $0.142 \pm 0.004$ & $0.210 \pm 0.008$ & $0.164 \pm 0.003$ \\
+\texttt{combo\_5} & $0.126 \pm 0.003$ & $0.132 \pm 0.006$ & $0.208 \pm 0.011$ & $0.155 \pm 0.005$ \\
+\texttt{combo\_20} & $0.113 \pm 0.002$ & $0.119 \pm 0.007$ & $0.188 \pm 0.006$ & $0.140 \pm 0.004$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 512$ centroids, centered inputs (each neuron's response to the mean input removed), Qwen3-0.6B. Mean $\pm$ standard deviation over 5 redraws of each centroid set; All = mean over the three layers.}
+\label{tab:ve-raw-ip-centered-M512}
+\end{table}
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Condition & Layer 7 & Layer 14 & Layer 21 & All \\
+\midrule
+\texttt{gate} & $0.257$ & $0.242$ & $0.325$ & $0.275$ \\
+\addlinespace
+\texttt{rand\_rot} & $0.178 \pm 0.003$ & $0.150 \pm 0.003$ & $0.223 \pm 0.002$ & $0.184 \pm 0.001$ \\
+\texttt{rand\_gcov} & $0.254 \pm 0.000$ & $0.279 \pm 0.002$ & $0.332 \pm 0.001$ & $0.288 \pm 0.001$ \\
+\texttt{rand\_iso} & $0.176 \pm 0.003$ & $0.148 \pm 0.003$ & $0.212 \pm 0.012$ & $0.179 \pm 0.004$ \\
+\addlinespace
+\texttt{combo\_2} & $0.223 \pm 0.004$ & $0.191 \pm 0.008$ & $0.301 \pm 0.002$ & $0.238 \pm 0.002$ \\
+\texttt{combo\_5} & $0.209 \pm 0.006$ & $0.189 \pm 0.004$ & $0.272 \pm 0.004$ & $0.223 \pm 0.003$ \\
+\texttt{combo\_20} & $0.185 \pm 0.004$ & $0.165 \pm 0.005$ & $0.247 \pm 0.001$ & $0.199 \pm 0.002$ \\
+\bottomrule
+\end{tabular}
+\caption{Share of input variance explained by the max-inner-product partition (\texttt{ve\_raw}), $M = 3072$ centroids, centered inputs (each neuron's response to the mean input removed), Qwen3-0.6B. Mean $\pm$ standard deviation over 3 redraws of each centroid set; the full gate set ($M = 3072$) is a single fixed set. All = mean over the three layers.}
+\label{tab:ve-raw-ip-centered-M3072}
+\end{table}

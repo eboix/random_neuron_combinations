@@ -114,7 +114,13 @@ features than the neuron basis here, which is the "already clean" claim in its s
 
 ## Repository contents
 
-* `scripts/` — the pipeline (see table above); `slurm/` — node7 job + env wrapper + per-model driver.
+* `docs/` — writeups of the follow-up experiments on *why* neurons look cleaner (centroid and locality tests, on Qwen
+  and ConvNeXt); start at `docs/README.md`.
+* `combo_interp/` — the LM agent study (Qwen3; its own README) and the shared experiment modules
+  (`geometry.py`, `locality.py`).
+* `scripts/` — the pipeline (see table above), plus `vision_mech.py` (the follow-up experiments on the vision models);
+  `slurm/` — node7 job + env wrapper + per-model driver, and `vision_mech*.sh` (one job per model for `vision_mech.py`).
+* `results/vision_mech/<model>/` — small result files (CSV / Markdown / PNG) of `vision_mech.py`.
 * `microscope/` — the self-contained viewer: `index.html` (or the artifact page `viewer.html`), `models.js`,
   and per model `meta.js`, `data/<layer>.js` (units, examples, 24×24 heatmaps, coherence) and
   `sprites/<layer>_<kind>.jpg` (all example sheets of a layer and unit kind stacked vertically).
