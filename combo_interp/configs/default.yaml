@@ -87,6 +87,23 @@ cache:                      # pass 2: stream corpus, project onto all units, kee
   train_tokens: 50000000
   holdout: {tokens: 5000000, k_big: 256, k_prof: 0, uniform_samples: 50000}
 
+geometry:                   # scripts/09_centroids.py: do W_gate rows partition the MLP input better than random centroids?
+  split: holdout            # tokens = this split's cached uniform sample (cache/<split>/L*/uniform.npz)
+  Ms: [32, 128, 512, 3072]  # centroid-set sizes (clipped to d_ff)
+  reps: {32: 10, 128: 10, 512: 5, 3072: 3}
+  combo_ks: [2, 5, 20]
+  center: true              # subtract the mean MLP input before cosine assignment (else one centroid wins everything)
+  random_init_seed: 0       # --init random: same architecture, untrained weights (does gating alone explain it?)
+
+locality:                   # scripts/10_locality.py: are each unit's top firings local in the MLP input space? (Experiment B)
+  n_top: 100                # top firings per unit, primary pole, one per document (as in the pilot)
+  n_xdir: 50                # control units per layer: random directions r in MLP-input space, z = r·x
+  uniform_tokens: 20000     # random train tokens: centering mean and the random-set baseline
+  n_random_sets: 200        # random token sets of size n_top (baseline for coh_excess)
+  mediator: coh_excess      # primary mediator (log_coh_ratio was planned; its denominator is ~0 after centering)
+  primary_y: sim_spearman   # primary agent metric (the one where v1 showed a neuron advantage)
+  scores_dir: random_q0.95  # which data/scores/<dir>/unit_scores.csv to join (random_quantile is comparable across conditions)
+
 export:                     # what agents see
   k_examples: 24
   dedupe_max_per_seq: 1

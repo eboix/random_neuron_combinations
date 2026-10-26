@@ -14,12 +14,14 @@ class StopForward(Exception):
 
 
 class MLPCapture:
-    def __init__(self, model, layers, capture_gate_up: bool = False, stop_after_last: bool = True):
+    def __init__(self, model, layers, capture_gate_up: bool = False, stop_after_last: bool = True,
+                 capture_input: bool = False):
         self.model = model
         self.layers = sorted(set(int(l) for l in layers))
         self.capture_gate_up = capture_gate_up
+        self.capture_input = capture_input      # x = the MLP input (post-norm), so gate_proj(x) is the gate pre-activation
         self.stop = stop_after_last
-        self.p, self.g, self.u = {}, {}, {}
+        self.p, self.g, self.u, self.x = {}, {}, {}, {}
         self._handles = []
 
     def __enter__(self):
@@ -31,6 +33,8 @@ class MLPCapture:
             if self.capture_gate_up:
                 self._handles.append(mlp.gate_proj.register_forward_hook(self._out(self.g, L)))
                 self._handles.append(mlp.up_proj.register_forward_hook(self._out(self.u, L)))
+            if self.capture_input:
+                self._handles.append(mlp.gate_proj.register_forward_pre_hook(self._in(self.x, L)))
         return self
 
     def __exit__(self, *exc):
@@ -46,6 +50,11 @@ class MLPCapture:
                 raise StopForward()
         return hook
 
+    def _in(self, store, L):
+        def hook(module, args):
+            store[L] = args[0]
+        return hook
+
     def _out(self, store, L):
         def hook(module, args, output):
             store[L] = output
@@ -53,7 +62,7 @@ class MLPCapture:
 
     def run(self, input_ids, attention_mask=None):
         import torch
-        self.p.clear(); self.g.clear(); self.u.clear()
+        self.p.clear(); self.g.clear(); self.u.clear(); self.x.clear()
         base = getattr(self.model, "model", self.model)   # skip lm_head entirely
         with torch.no_grad():
             try:
