@@ -245,7 +245,8 @@ def stage_centroids(a, M):
     import pandas as pd
     from combo_interp.geometry import centroid_eval
     from combo_interp.geometry_report import write_report
-    out = M / 'centroids'
+    rules = tuple(a.assign.split(','))
+    out = M / ('centroids' if rules == ('cos', 'euclid') else 'centroids_' + '_'.join(rules))
     out.mkdir(exist_ok=True)
     for tag, center in [('centered', True), ('raw', False)]:
         rows = []
@@ -262,9 +263,11 @@ def stage_centroids(a, M):
                 Ms = sorted({min(m, cap_m) for m in [32, 128, 512, 3072]})
                 reps = {min(k, cap_m): v for k, v in {32: 10, 128: 10, 512: 5, 3072: 3}.items()}
                 for r in centroid_eval(X, Wg, None, labels, fit, Ms, reps, combo_ks=(2, 5, 20), center=center,
-                                       seed=a.seed + a.layers.index(L), assign_rules=('cos', 'euclid'),
+                                       seed=a.seed + a.layers.index(L), assign_rules=rules,
                                        log=lambda m, L=L, init=init: print(f'{tag} {init} {L} {m}', flush=True)):
                     rows.append({'init': init, 'layer': L, **r})
+                if 'ip' in rules:
+                    rows += gate_bias_rows(X, Wg, z['b_in'], labels, fit, Ms, center, init, L)
         df = pd.DataFrame(rows)
         df.to_csv(out / f'centroids_{tag}.csv', index=False)
         # the shared report knows the LM label names; map class -> doc slot, position -> next-token slot, then rename
@@ -277,6 +280,35 @@ def stage_centroids(a, M):
             if f.name.startswith(('nmi_doc', 'nmi_next')):
                 f.rename(out / f.name.replace('nmi_doc', 'nmi_class').replace('nmi_next', 'nmi_pos'))
         print((out / f'summary_{tag}.md').read_text())
+
+
+def gate_bias_rows(X, Wg, b, labels, fit, Ms, center, init, L, seed=0):
+    """ip with the first layer's bias: argmax_j (W_in[j]·x + b_j), the neuron with the largest pre-activation
+    (meaningful on uncentered x). Same subsets of rows as the gate set would draw are not reproducible here, so M
+    random rows per repetition (all rows at M = d_ff); scored like combo_interp.geometry.partition_metrics."""
+    import torch
+    from combo_interp.geometry import assign, nmi, unit_rows, var_explained
+    rng = np.random.default_rng(seed + 40_000)
+    X = X.astype(np.float32)
+    if center:
+        X = X - X[fit].mean(0)
+    Xc = torch.from_numpy(np.ascontiguousarray(X[~fit]))
+    Xn = torch.from_numpy(np.ascontiguousarray(unit_rows(X[~fit])))
+    lab = {k: v[~fit] for k, v in labels.items()}
+    rows = []
+    for Mv in Ms:
+        for r in range(1 if Mv >= len(Wg) else {32: 10, 128: 10, 512: 5}.get(Mv, 3)):
+            idx = rng.choice(len(Wg), Mv, replace=False)
+            C = torch.from_numpy(np.ascontiguousarray(Wg[idx], dtype=np.float32))
+            a_ = assign(Xc, C, bias=torch.from_numpy(b[idx].astype(np.float32)))
+            sizes = torch.bincount(a_, minlength=Mv).double()
+            p = sizes[sizes > 0] / sizes.sum()
+            an = a_.numpy(); perm = rng.permutation(an)
+            rows.append({'init': init, 'layer': L, 'assign': 'ip', 'set': 'gate_bias', 'M': Mv, 'rep': r,
+                         'obj': np.nan, 'dist': np.nan, 've': var_explained(Xn, a_, Mv), 've_raw': var_explained(Xc, a_, Mv),
+                         'eff_k': float(torch.exp(-(p * p.log()).sum())), 'used': int((sizes > 0).sum()),
+                         **{f'nmi_{k}': nmi(an, y) - nmi(perm, y) for k, y in lab.items()}})
+    return rows
 
 
 def published_units(a, L):
@@ -696,6 +728,8 @@ def main():
     ap.add_argument('--workers', type=int, default=min(8, os.cpu_count() or 2))
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--limit', type=int, default=0, help='debug: only the first N images')
+    ap.add_argument('--assign', default='cos,euclid', help='centroids stage: assignment rules (cos, euclid, ip); '
+                    'anything but the default writes to centroids_<rules>/')
     ap.add_argument('--resume', action='store_true', help='skip stages already completed (marker files .done_<stage>)')
     ap.add_argument('--export', type=Path, default=None, help='copy the small result files (csv/md/png/json) here at the end')
     a = ap.parse_args()
@@ -722,7 +756,7 @@ def main():
         import shutil
         dst = a.export.expanduser() / a.name
         for f in [M / 'resolve.json', *M.glob('final_*.json'), *M.glob('clip_*.json'),
-                  *(M / 'centroids').glob('*'), *(M / 'locality').glob('*')]:
+                  *M.glob('centroids*/*'), *(M / 'locality').glob('*')]:
             if f.is_file():
                 rel = f.relative_to(M)
                 (dst / rel.parent).mkdir(parents=True, exist_ok=True)

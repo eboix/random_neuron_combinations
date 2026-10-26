@@ -74,6 +74,51 @@ but fall below isotropic random directions in stage3 (0.103 vs 0.162 at M = 3072
 So, as in the LM document, the Euclidean numbers mostly measure how centroid norms are distributed. Full tables are in
 `centroids/summary_centered.md`. The uncentered variant is in `centroids/summary_raw.md`.
 
+### Max-inner-product assignment (added 2026-10-26)
+
+Each point is assigned to `argmax_j ⟨c_j, x⟩`, with rows at their native norm: for the weight rows, the neuron with the
+largest pre-activation (minus its bias). This uses the `ip` rule of `combo_interp.geometry`, the same code as the LM
+case. Results are in `results/vision_mech/convnext-tiny-224/centroids_cos_ip/`.
+
+**Sets.**
+* `gate` = `pwconv1` rows. There is no `up`: ConvNeXt's MLP has no gated value branch.
+* `rand_rot` = gate rows times a random rotation (same norms and mutual angles).
+* `rand_iso` = isotropic directions, and `combo_2/5/20` = mixes of 2, 5 or 20 unit gate rows. Both are given the
+  norms of randomly drawn gate rows.
+* **`rand_gcov` = Gaussian centroids with the gate rows' mean and covariance** (same first and second moments,
+  nothing else).
+* Extra: `gate_bias` = argmax of `W_in·x + b`, the neuron with the largest *actual* pre-activation.
+
+Variance reduction `ve_raw` (median over repetitions), trained model, centered inputs, stage2.block8 / stage3.block2:
+
+| M | gate | gate_bias | rand_gcov | rand_rot | rand_iso | combo_2 | combo_5 | combo_20 |
+|---|---|---|---|---|---|---|---|---|
+| 32 | .054 / .058 | .056 / .060 | .044 / .071 | .037 / .049 | .036 / .049 | .048 / .083 | .049 / .074 | .048 / .077 |
+| 128 | .096 / .080 | .094 / .081 | .069 / .093 | .056 / .073 | .057 / .070 | .080 / .104 | .078 / .104 | .076 / .101 |
+| 512 | .148 / .132 | .148 / .133 | .105 / .121 | .090 / .102 | .089 / .103 | .125 / .142 | .118 / .138 | .111 / .132 |
+| d_ff | **.211 / .299** | .216 / .306 | .158 / .223 | .138 / .205 | .139 / .204 | .174 / .262 | .169 / .260 | .161 / .237 |
+
+![variance reduction, inner-product assignment](figures/vision/ve_raw_ip_centered.png)
+
+* **Stage2 (mid block): gate rows beat every null at every M, in every repetition** (`ve_raw`). The covariance-matched
+  set `rand_gcov` is the strongest null: at M = 1536 it reaches .158 against the gate rows' .211. So the gate rows
+  partition the data better than random vectors with the same mean and covariance, i.e. better than their second-order
+  statistics alone would.
+* **Stage3 (last block): it depends on M.** With all 3072 neurons the gate rows beat every null in every repetition
+  (.299 vs ≤ .262), and they beat `rand_gcov`, `rand_rot` and `rand_iso` from M = 512 on. With 32–128 centroids, the
+  neuron mixes (`combo_k`) and `rand_gcov` explain more variance than single gate rows. A small random subset of
+  last-block neurons covers the input worse than a few mixes of them.
+* **Dilution with k** (combo_2 ≥ combo_5 ≥ combo_20 > rand_rot at large M) and **zero effect at initialization** (in the random-init
+  model all sets lie within 0.011 of each other at every M, with no consistent order) hold as under the cosine rule.
+* **The partition by the largest pre-activation is class-informative only in the last block:** chance-corrected NMI
+  with the ImageNet class at M = 3072 is .157 for the gate rows, against .013 for `rand_gcov` / `rand_rot` /
+  `rand_iso` and .047 for `combo_20`.
+* **The bias barely matters:** `gate_bias` is within .007 of `gate` everywhere.
+* **Uncentered inputs** (the literal pre-activation): gate rows keep their partition spread out (effective number of
+  clusters 1,766 of 3,072 in stage3). The combinations collapse, because a few of them align with the mean input and
+  win almost every point (effective number 44–57). So at M = 3072 the gate rows' lead is larger (.318 vs `rand_gcov`
+  .171, combos ≤ .131). Full tables: `centroids_cos_ip/summary_raw.md`.
+
 ## 3. Experiment B: locality of the top images, and does it explain CLIP coherence?
 
 **Conditions** (50 units each per block; the published units are always included):
