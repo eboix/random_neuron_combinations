@@ -11,7 +11,8 @@ cache: {holdout: {tokens: 5000000, k_big: 256, k_prof: 0, uniform_samples: 20000
 geometry:
   Ms: [32, 128, 512, 3072, 12288]
   reps: {32: 10, 128: 10, 512: 5, 3072: 3, 12288: 3}
-agents: {units_per_condition_per_layer: 24, backend: claude, concurrency: 4}   # 24 x 9 x 3 = 648 units
+agents: {units_per_condition_per_layer: 24, backend: claude, concurrency: 4,    # 24 x 9 x 3 = 648 units
+         query: {enabled: true}}   # explainers may run their own texts through the model (budget: agents.query.budget_texts)
 scoring:
   threshold: random_quantile    # primary definition of "fires strongly" (per-unit, calibrated on random text)
   random_quantile: 0.95
