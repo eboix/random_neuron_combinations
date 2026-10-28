@@ -201,13 +201,16 @@ def nmi(a, y):
     """Normalized mutual information (arithmetic-mean normalization) of two integer label arrays."""
     a = np.unique(a, return_inverse=True)[1]
     y = np.unique(y, return_inverse=True)[1]
-    n = len(a)
-    joint = np.bincount(a * (y.max() + 1) + y, minlength=(a.max() + 1) * (y.max() + 1)).reshape(a.max() + 1, -1) / n
-    pa, py = joint.sum(1), joint.sum(0)
-    nz = joint > 0
-    mi = (joint[nz] * np.log(joint[nz] / np.outer(pa, py)[nz])).sum()
-    ha = -(pa[pa > 0] * np.log(pa[pa > 0])).sum()
-    hy = -(py[py > 0] * np.log(py[py > 0])).sum()
+    n, ny = len(a), int(y.max()) + 1
+    # nonzero cells of the contingency table only: the dense table (clusters x distinct tokens, ~1e8-1e9 cells at
+    # M = 12288) made each call take seconds and dominated the run time of Experiment A on Qwen3-8B
+    cells, cnt = np.unique(a * ny + y, return_counts=True)
+    ca, cy = np.bincount(a).astype(np.float64), np.bincount(y).astype(np.float64)
+    pj = cnt / n
+    mi = (pj * np.log(cnt * float(n) / (ca[cells // ny] * cy[cells % ny]))).sum()
+    pa, py = ca / n, cy / n
+    ha = -(pa * np.log(pa)).sum()
+    hy = -(py * np.log(py)).sum()
     return float(2 * mi / (ha + hy)) if ha + hy > 0 else 0.0
 
 

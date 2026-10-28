@@ -35,8 +35,10 @@ sub() {  # sub <stage> <cpu|gpu|big> <time> [dependency job ids...]   (gpu / big
 # Cache stages requeue themselves at the limit, so theirs can be tight; the others restart from scratch.
 T() {
   case $1 in
-    corpus) echo 08:00:00 ;;  stats_units) echo 04:00:00 ;;  cache_train) echo 12:00:00 ;;
-    cache_holdout) echo 04:00:00 ;;  calibrate) echo 02:00:00 ;;  export) echo 05:00:00 ;;  centroids) echo 10:00:00 ;;
+    # first Qwen3-8B run (sacct): corpus 4 min, stats_units 5, cache_train 20, cache_holdout 4, calibrate 1, export 4;
+    # centroids > 4 h (timed out; resumes per layer). 12 h exceeded the dgx-b200 QOS wall-time cap; 4 h was accepted.
+    corpus) echo 01:00:00 ;;  stats_units) echo 01:00:00 ;;  cache_train) echo 02:00:00 ;;
+    cache_holdout) echo 01:00:00 ;;  calibrate) echo 01:00:00 ;;  export) echo 01:00:00 ;;  centroids) echo 04:00:00 ;;
     explain) echo 16:00:00 ;;  write|simulate) echo 08:00:00 ;;
   esac
 }

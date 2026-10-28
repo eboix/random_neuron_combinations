@@ -6,6 +6,7 @@
   python scripts/09_centroids.py --config ... --report           # summary.md + plot from both
 """
 import json
+import time
 
 from _common import setup
 
@@ -49,6 +50,7 @@ from combo_interp.geometry import capture_inputs, mlp_weights  # noqa: E402
 from combo_interp.model_utils import load_model  # noqa: E402
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"{time.strftime('%H:%M:%S')} [centroids] init={args.init} center={g.center} device={device}", flush=True)
 model, tok = load_model(cfg, device)
 if args.init == "random":
     from transformers import AutoModelForCausalLM
@@ -84,14 +86,22 @@ out.mkdir(parents=True, exist_ok=True)
 write_json(out / "doc_labels.json", {"counts_tokens": {n: int((doc == i).sum()) for i, n in enumerate(names)}})
 rows = []
 for L in layers:
+    part = out / f"centroids_{tag}_L{L}.csv"       # per-layer results: a rerun after a timeout skips finished layers
+    if part.exists() and not args.recapture:
+        print(f"L{L} done earlier ({part.name}), skipping", flush=True)
+        rows += pd.read_csv(part).to_dict("records")
+        continue
+    layer_rows = []
     X = np.load(cap_dir / f"X_L{L}.npy")
     Wg, Wu = mlp_weights(model, L)
     Ms = sorted({min(int(m), Wg.shape[0]) for m in g.Ms})
     reps = {min(int(k), Wg.shape[0]): int(v) for k, v in dict(g.reps).items()}
     for r in centroid_eval(X, Wg, Wu, labels, fit, Ms, reps, combo_ks=list(g.combo_ks), center=bool(g.center),
-                           seed=int(cfg.seed) + L, log=lambda m, L=L: print(f"L{L} {m}", flush=True),
+                           seed=int(cfg.seed) + L, log=lambda m, L=L: print(f"{time.strftime('%H:%M:%S')} L{L} {m}", flush=True),
                            assign_rules=tuple(g.assign), device=device):
-        rows.append({"init": args.init, "layer": L, **r})
+        layer_rows.append({"init": args.init, "layer": L, **r})
+    pd.DataFrame(layer_rows).to_csv(part, index=False)
+    rows += layer_rows
 pd.DataFrame(rows).to_csv(out / f"centroids_{tag}.csv", index=False)
 print(json.dumps({"rows": len(rows), "out": str(out)}))
 report()
