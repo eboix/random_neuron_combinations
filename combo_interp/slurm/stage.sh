@@ -45,7 +45,8 @@ case "$1" in
                    done
                    A="$A --set agents.query.url=http://127.0.0.1:$port"
                  fi
-                 python scripts/05_run_agents.py $C $A --stage "$1" ;;               # resumable: finished units skipped
+                 # CI_AGENT_ARGS (set at submit time, e.g. "--limit 3" for a trial) is passed on to 05_run_agents.py
+                 python scripts/05_run_agents.py $C $A --stage "$1" ${CI_AGENT_ARGS:-} ;;   # resumable: finished units skipped
   serve)         # model query service for explainer agents on a laptop; reach it through an SSH tunnel
                  echo "[serve] on the laptop: ssh -N -L 8765:$(hostname):8765 <you>@<login node>"
                  python scripts/05b_query_server.py $C --host 0.0.0.0 --port 8765 ;;

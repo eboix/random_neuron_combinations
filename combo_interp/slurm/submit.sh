@@ -7,6 +7,7 @@
 #   bash slurm/submit.sh agents   Claude agents on the cluster: explain -> {write, simulate}. explain runs on a GPU
 #                                 (model query service in the same job) only if agents.query.enabled, else on CPU
 #   bash slurm/submit.sh explain|write|simulate   one agent stage (resumable: rerun after a timeout / usage limit)
+#   CI_AGENT_ARGS="--limit 3" bash slurm/submit.sh agents   trial on the first 3 selected units (the full run skips them)
 #   bash slurm/submit.sh serve    query service for explainer agents running on a LAPTOP (SSH tunnel; see README)
 #   bash slurm/submit.sh probe    after the write / simulate results exist
 #   bash slurm/submit.sh score    scores + equivalence analysis (primary threshold + corpus_frac sensitivity)
