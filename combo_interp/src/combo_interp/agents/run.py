@@ -158,6 +158,8 @@ def _claude(cfg, paths, stage, work):
     try:
         j = json.loads(r.stdout)
         info.update({"cost": j.get("total_cost_usd"), "turns": j.get("num_turns"), "is_error": j.get("is_error")})
+        if j.get("is_error"):       # e.g. a sign-in or usage-limit message; the CLI reports it here, not on stderr
+            info["error_message"] = str(j.get("result", ""))[-500:]
     except Exception:
         info["stdout_tail"] = r.stdout[-500:]
     return info
@@ -254,3 +256,5 @@ def _run_selected(cfg, paths, stage, limit, only, log, dry_run):
             if (i + 1) % 10 == 0:
                 log(f"[agents:{stage}] {i + 1}/{len(sel)} {counts} cost=${cost:.2f}")
     log(f"[agents:{stage}] done {counts} total cost=${cost:.2f}")
+    if counts["failed"] and not counts["ok"] and not counts["skipped"]:
+        raise RuntimeError(f"[agents:{stage}] every unit failed; reasons in {log_path} (error_message / stderr)")

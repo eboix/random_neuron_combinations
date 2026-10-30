@@ -154,6 +154,28 @@ def test_claude_backend_denies_private_data_and_repo():
             read_deny_roots(cfg2, paths2)
 
 
+def test_claude_errors_are_logged_and_stop_the_stage():
+    """A CLI error (reported in the JSON result, not on stderr) is kept in the run log, and a stage where every unit
+    failed exits with an error so that jobs depending on it do not start."""
+    import stat
+    from pathlib import Path
+    import pytest
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        fake = tmp / "claude"
+        fake.write_text("#!/usr/bin/env python3\nimport json\nprint(json.dumps({'is_error': True, 'num_turns': 1, "
+                        "'total_cost_usd': 0, 'result': 'Invalid API key'}))\nraise SystemExit(1)\n")
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        cfg0, paths0, _, tok = build_world(str(tmp))
+        build_agent_cache(cfg0, paths0, tok, log=lambda *_: None)
+        cfg, paths = smoke_cfg(str(tmp), [f"paths.agent_work_root={tmp}/work", "agents.backend=claude",
+                                          f"agents.claude_cmd={fake}", "agents.retries=0"])
+        with pytest.raises(RuntimeError, match="every unit failed"):
+            run_stage(cfg, paths, "explain", limit=2, log=lambda *_: None)
+        rows = [json.loads(l) for l in open(paths.agent_results("explain") / "_run_log.jsonl")]
+        assert len(rows) == 2 and all(r["status"] == "failed" and r["error_message"] == "Invalid API key" for r in rows)
+
+
 def test_claude_backend_refuses_workspace_under_claude_md():
     from pathlib import Path
     import pytest
