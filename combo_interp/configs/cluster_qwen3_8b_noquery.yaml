@@ -1,0 +1,7 @@
+# Qwen3-8B study, explainers WITHOUT model queries: same data, units and selection as cluster_qwen3_8b.yaml, but a
+# separate agent run (agents.run_tag) so it never mixes with the run where explainers may query the model.
+# Explain runs on a CPU node. Submit with:  CI_CONFIG=configs/cluster_qwen3_8b_noquery.yaml bash slurm/submit.sh agents
+base: cluster_qwen3_8b.yaml
+agents:
+  run_tag: noquery
+  query: {enabled: false}

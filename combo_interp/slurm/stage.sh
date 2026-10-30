@@ -50,9 +50,10 @@ case "$1" in
   serve)         # model query service for explainer agents on a laptop; reach it through an SSH tunnel
                  echo "[serve] on the laptop: ssh -N -L 8765:$(hostname):8765 <you>@<login node>"
                  python scripts/05b_query_server.py $C --host 0.0.0.0 --port 8765 ;;
-  probe)         python scripts/06_build_probe_job.py $C
-                 python scripts/07_probe.py $C --job-file $D/probe/probe_in.jsonl --out $D/probe/probe_out.jsonl ;;
-  score)         P="--probe $D/probe/probe_out.jsonl"
+  probe)         PD=$(ci_probe_dir)                                                  # per agent run (agents.run_tag)
+                 python scripts/06_build_probe_job.py $C
+                 python scripts/07_probe.py $C --job-file $PD/probe_in.jsonl --out $PD/probe_out.jsonl ;;
+  score)         P="--probe $(ci_probe_dir)/probe_out.jsonl"
                  python scripts/08_score_and_analyze.py $C $P                                          # primary (config)
                  python scripts/08_score_and_analyze.py $C $P --set scoring.threshold=corpus_frac ;;    # sensitivity
   *) echo "unknown stage $1"; exit 2 ;;

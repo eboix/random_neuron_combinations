@@ -51,4 +51,8 @@ ci_query_enabled() {  # prints 1 if agents.query.enabled in $CI_CONFIG (explain 
   (cd "$CI_CODE" && "$CI_VENV/bin/python" -c "import sys; sys.path.insert(0, 'src'); from combo_interp.config import load_config
 q = load_config('$CI_CONFIG').agents.get('query') or {}; print(int(bool(q.get('enabled'))))")
 }
+ci_probe_dir() {      # probe files of this config's agent run (data/probe, or data/probe/<agents.run_tag>)
+  (cd "$CI_CODE" && "$CI_VENV/bin/python" -c "import sys; sys.path.insert(0, 'src'); from combo_interp.config import load_config, Paths
+print(Paths(load_config('$CI_CONFIG')).probe)")
+}
 mkdir -p "$COMBO_DATA_ROOT" "$COMBO_PRIVATE_ROOT" "$CI_LOGS" "$HF_HOME"

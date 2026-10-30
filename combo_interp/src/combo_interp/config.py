@@ -70,6 +70,12 @@ class Paths:
         # agent workspaces must not sit under a folder with a CLAUDE.md (claude -p would load it into every agent)
         aw = os.environ.get("COMBO_AGENT_WORK", cfg.paths.get("agent_work_root"))
         self.agent_work_root = Path(aw).expanduser() if aw else self.data / "agent_work"
+        # agents.run_tag: separate agent runs on the same data (e.g. "noquery") get their own agent workspaces, agent
+        # results, query log, probe files, scores and analysis results; empty = the plain layout
+        self.run_tag = str(cfg.agents.get("run_tag") or "")
+
+    def _tagged(self, p: Path) -> Path:
+        return p / self.run_tag if self.run_tag else p
 
     def corpus(self, split: str) -> Path:
         return self.data / "corpus" / split
@@ -88,14 +94,23 @@ class Paths:
         return self.data / "agent_cache"
 
     def agent_work(self, stage: str) -> Path:
-        return self.agent_work_root / stage
+        return self._tagged(self.agent_work_root) / stage
 
     def agent_results(self, stage: str) -> Path:
-        return self.data / "agent_results" / stage
+        return self._tagged(self.data / "agent_results") / stage
+
+    @property
+    def probe(self) -> Path:
+        return self._tagged(self.data / "probe")
 
     @property
     def scores(self) -> Path:
-        return self.data / "scores"
+        return self._tagged(self.data / "scores")
+
+    @property
+    def agent_analysis(self) -> Path:
+        """Equivalence analysis of the agent scores (results/<threshold>, or results/<run_tag>/<threshold>)."""
+        return self._tagged(self.results)
 
     @property
     def results(self) -> Path:
@@ -122,4 +137,4 @@ class Paths:
     @property
     def query_log(self) -> Path:
         """Explainer model queries, one jsonl per unit (written by the query service)."""
-        return self.data / "query_log"
+        return self._tagged(self.data / "query_log")

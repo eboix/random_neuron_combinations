@@ -56,7 +56,7 @@ def build_probe_job(cfg, paths, tok, log=print):
                     break
             ids = store.get_tokens(seq, 0, int(cfg.scoring.rand_prefix_tokens))
             rows.append({"probe_id": f"{b}|rand|{i}", "unit_id": uid, "kind": "rand", "text": tok.decode(ids.tolist())})
-    out = paths.data / "probe" / "probe_in.jsonl"
+    out = paths.probe / "probe_in.jsonl"
     write_jsonl(out, rows)
     log(f"[probe-job] {len(rows)} texts for {len(wr)} units -> {out}")
     return out

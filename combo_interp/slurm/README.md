@@ -31,6 +31,11 @@ if you switch a GPU partition, set `CI_GPU_CPUS` / `CI_BIG_GPU_CPUS` to match (t
 | 2 | cluster | `bash slurm/submit.sh agents` | explain, then write and simulate. explain runs on a GPU with the model query service in the same job if `agents.query.enabled`, else on CPU. Resumable: after a timeout or a usage limit, `bash slurm/submit.sh explain` (or write / simulate) again |
 | 3 | cluster | `bash slurm/submit.sh probe`, then `bash slurm/submit.sh score` | score the writer's texts, then scores + equivalence tests |
 
+A second agent run on the same data, with explainers that may NOT query the model (explain on CPU), lives in its own
+folders (`agents.run_tag: noquery`: `agent_results/noquery/`, `probe/noquery/`, `scores/noquery/`, `results/noquery/`).
+Use the same `CI_CONFIG` for all three phases of that run:
+`CI_CONFIG=configs/cluster_qwen3_8b_noquery.yaml bash slurm/submit.sh agents` (then `... probe`, `... score`).
+
 `cache_train` / `cache_holdout` handle their time limit themselves: 20 min before it, Slurm signals the job, the stage
 writes a checkpoint, and the job requeues under the same job ID (log: `[job] checkpointed; requeueing ...`), so `export`
 keeps waiting on it. At most `CI_MAX_REQUEUES` (5) times; after that, or if requeueing is refused, resume by hand with

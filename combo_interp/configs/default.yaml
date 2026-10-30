@@ -138,6 +138,8 @@ agents:
   allowed_tools: ["Read", "Write", "Glob", "Grep"]   # no shell: agents only read/write files in their own folder
                                                      # (model queries go through files, see agents.query)
   deny_read: []             # extra folders agents may not read; private/, the data root and this repo are always denied
+  run_tag: ""               # non-empty: a separate agent run on the same data (own agent_results/<tag>/, probe/<tag>/,
+                            # scores/<tag>/, results/<tag>/, query_log/<tag>/, agent workspaces <agent_work_root>/<tag>/)
   query:                    # explainer may run its own texts through the model: it writes queries/NNN.txt, a relay in
                             # 05_run_agents.py answers with queries/NNN.out.md (05b_query_server.py must be up)
     enabled: false
