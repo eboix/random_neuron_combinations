@@ -4,7 +4,7 @@ Everything runs on the cluster through `slurm/submit.sh`, including the Claude a
 Anthropic API). Running the agents on a laptop instead still works (end of this file).
 
 ## One-time setup (cluster login node)
-Defaults in `slurm/env.sh` target Penn PARCC's Betty (`ssh <PennKey>@slurm_login.parcc.upenn.edu`).
+Defaults in `slurm/env.sh` target Penn PARCC's Betty (`ssh <PennKey>@login.betty.parcc.upenn.edu`).
 ```bash
 srun --ntasks=1 --cpus-per-task=1 --mem=1G hostname        # fails -> PI must add you to a ColdFront project
 git clone -b rohan https://github.com/eboix/random_neuron_combinations.git ~/projects/RandomNeuronCombinations
@@ -51,7 +51,7 @@ the CLI under `~/.claude/projects/`; to check afterwards that no agent touched p
 
 ## Alternative: agents on a laptop
 ```bash
-CL=<PennKey>@slurm_login.parcc.upenn.edu; R=combo_runs/qwen3_8b_v1/data; L=~/combo_runs/qwen3_8b_v1/data; cd combo_interp
+CL=<PennKey>@login.betty.parcc.upenn.edu; R=combo_runs/qwen3_8b_v1/data; L=~/combo_runs/qwen3_8b_v1/data; cd combo_interp
 rsync -av $CL:$R/agent_cache $L/                                    # views only; private/ stays on the cluster
 COMBO_DATA_ROOT=$L python scripts/05_run_agents.py --config configs/cluster_qwen3_8b.yaml --stage explain --limit 5   # check cost first
 COMBO_DATA_ROOT=$L python scripts/05_run_agents.py --config configs/cluster_qwen3_8b.yaml --stage explain
