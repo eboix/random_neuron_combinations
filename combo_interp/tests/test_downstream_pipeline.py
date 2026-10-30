@@ -71,6 +71,14 @@ def test_full_downstream():
         emulate_probe(cfg, paths, p1, o1, model, tok)
         o2 = o1                                                                     # (single round now)
 
+        # ---- simulator-only scores (no probe) and their LaTeX tables (scripts/08b_sim_tables.py)
+        from combo_interp.tables import sim_tables
+        dsim = compute_scores(cfg, paths, [], log=quiet)
+        assert len(dsim) == len(sel) and dsim["sim_spearman"].notna().all() and dsim["rate_pred"].isna().all()
+        tex = sim_tables(dsim, cfg)
+        assert tex.count("\\begin{frame}") == 3 and all(f"\\texttt{{{c.replace('_', chr(92) + '_')}}}" in tex
+                                                         for c in dsim["cond"].unique())
+
         # ---- scores + analysis
         df = compute_scores(cfg, paths, [o1], log=quiet)
         assert len(df) == len(sel)

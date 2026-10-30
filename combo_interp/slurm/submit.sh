@@ -11,6 +11,7 @@
 #   bash slurm/submit.sh serve    query service for explainer agents running on a LAPTOP (SSH tunnel; see README)
 #   bash slurm/submit.sh probe    after the write / simulate results exist
 #   bash slurm/submit.sh score    scores + equivalence analysis (primary threshold + corpus_frac sensitivity)
+#   bash slurm/submit.sh score_sim   simulator scores + LaTeX tables only (results/[<run_tag>/]sim_tables.tex)
 #   bash slurm/submit.sh <stage>  any single stage of slurm/stage.sh (e.g. cache_train to resume after a timeout)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -69,6 +70,7 @@ case "${1:?phase or stage}" in
   serve)  echo "serve=$(sub serve gpu 12:00:00)  (cancel with scancel when the explain stage is done)" ;;
   probe)  echo "probe=$(sub probe big 05:00:00)" ;;
   score)  echo "score=$(sub score cpu 02:00:00)" ;;
+  score_sim) echo "score_sim=$(sub score_sim cpu 01:00:00)  (simulator scores + LaTeX tables; no probe needed)" ;;
   corpus|export) echo "$1=$(sub "$1" cpu $(T $1))" ;;
   stats_units|cache_train|cache_holdout|calibrate|centroids) echo "$1=$(sub "$1" big $(T $1))" ;;
   *) echo "unknown phase/stage $1"; exit 2 ;;

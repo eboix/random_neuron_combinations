@@ -53,6 +53,7 @@ case "$1" in
   probe)         PD=$(ci_probe_dir)                                                  # per agent run (agents.run_tag)
                  python scripts/06_build_probe_job.py $C
                  python scripts/07_probe.py $C --job-file $PD/probe_in.jsonl --out $PD/probe_out.jsonl ;;
+  score_sim)     python scripts/08b_sim_tables.py $C ;;                             # simulator scores + tables only
   score)         P="--probe $(ci_probe_dir)/probe_out.jsonl"
                  python scripts/08_score_and_analyze.py $C $P                                          # primary (config)
                  python scripts/08_score_and_analyze.py $C $P --set scoring.threshold=corpus_frac ;;    # sensitivity
